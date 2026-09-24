@@ -30,7 +30,7 @@ export class GeminiProvider implements AiProvider {
     });
 
     this.model =
-      this.configService.get<string>('GEMINI_MODEL') ?? 'gemini-3.8-pro';
+      this.configService.get<string>('GEMINI_MODEL') ?? 'gemini-3.5-flash-lite';
   }
 
   private async _cleanupFiles(filePaths: string[]): Promise<void> {
@@ -112,27 +112,81 @@ export class GeminiProvider implements AiProvider {
           createPartFromUri(file.uri, file.mimeType),
         );
       }
-      const countTokensResponse = await this.client.models.countTokens({
-        model: this.model,
-        contents: createUserContent([
-          ...fileParts,
-          generateQuizPrompt(dto.prompt),
+      const modelCandidates = Array.from(
+        new Set([
+          this.model,
+          'gemini-3.5-flash-lite',
+          'gemini-3.6-flash',
+          'gemini-3.1-flash-lite',
+          'gemini-3.8-flash',
         ]),
-      });
-      console.log(countTokensResponse.totalTokens);
-      const response = await this.client.models.generateContent({
-        model: this.model,
-        contents: createUserContent([
-          ...fileParts,
-          generateQuizPrompt(dto.prompt),
-        ]),
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: quizCreationSchema,
-        },
-      });
+      );
 
-      return JSON.parse(response.text ?? '');
+      const userContent = createUserContent([
+        ...fileParts,
+        generateQuizPrompt(dto),
+      ]);
+
+      let responseText: string | null = null;
+      let lastError: any = null;
+
+      for (const candidateModel of modelCandidates) {
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            console.log(
+              `[GeminiProvider] Attempting quiz generation with ${candidateModel} (attempt ${attempt})...`,
+            );
+            const response = await this.client.models.generateContent({
+              model: candidateModel,
+              contents: userContent,
+              config: {
+                responseMimeType: 'application/json',
+                responseSchema: quizCreationSchema,
+              },
+            });
+
+            if (response.text) {
+              responseText = response.text;
+              console.log(
+                `[GeminiProvider] Successfully generated quiz using model: ${candidateModel}`,
+              );
+              break;
+            }
+          } catch (err: any) {
+            lastError = err;
+            const errMsg = err?.message || String(err);
+            const isTransient =
+              err?.status === 503 ||
+              errMsg.includes('503') ||
+              errMsg.includes('high demand') ||
+              err?.status === 429 ||
+              errMsg.includes('429');
+
+            console.warn(
+              `[GeminiProvider] Model ${candidateModel} failed on attempt ${attempt}:`,
+              errMsg,
+            );
+
+            if (isTransient && attempt < 2) {
+              await new Promise((resolve) =>
+                setTimeout(resolve, 1000 + Math.random() * 600),
+              );
+            } else {
+              break; // Switch to next candidate model
+            }
+          }
+        }
+
+        if (responseText) {
+          break;
+        }
+      }
+
+      if (!responseText) {
+        throw lastError || new Error('All model candidates failed to generate quiz.');
+      }
+
+      return JSON.parse(responseText);
     } catch (error: any) {
       if (error instanceof ApiError) {
         console.error('API Error:', error.message);

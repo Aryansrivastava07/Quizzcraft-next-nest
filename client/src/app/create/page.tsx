@@ -63,6 +63,13 @@ function CreateQuizContent() {
   const [progressStatus, setProgressStatus] = useState("");
   const [generateError, setGenerateError] = useState<string | null>(null);
 
+  // Post-Creation Mission Popup State
+  const [createdQuizPayload, setCreatedQuizPayload] = useState<any>(null);
+  const [showMissionModal, setShowMissionModal] = useState(false);
+  const [missionChoice, setMissionChoice] = useState<"practice" | "host">("practice");
+  const [postPublicForLeaderboard, setPostPublicForLeaderboard] = useState(true);
+  const [isStartingPractice, setIsStartingPractice] = useState(false);
+
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     setGenerateError(null);
@@ -74,11 +81,17 @@ function CreateQuizContent() {
     try {
       const response = await quizService.generateQuiz({
         prompt: promptText,
+        questionCount,
+        difficulty,
+        quizType,
+        sourceUrl: selectedSources.includes("url") && urlInput.trim() ? urlInput.trim() : undefined,
       });
 
       if (response?.data?.quiz) {
-        localStorage.setItem("qc_active_quiz", JSON.stringify(response.data.quiz));
-        router.push(`/editor?quizId=${response.data.quiz.quizId}`);
+        const quiz = response.data.quiz;
+        localStorage.setItem("qc_active_quiz", JSON.stringify(quiz));
+        setCreatedQuizPayload(quiz);
+        setShowMissionModal(true);
       } else {
         throw new Error("Backend response did not contain quiz payload");
       }
@@ -88,6 +101,29 @@ function CreateQuizContent() {
       setIsGenerating(false);
       setProgressStatus("");
     }
+  };
+
+  const handleStartPractice = async () => {
+    if (!createdQuizPayload) return;
+    setIsStartingPractice(true);
+    try {
+      if (postPublicForLeaderboard) {
+        await quizService.deployQuiz(createdQuizPayload.quizId, {
+          deploymentType: "ANYTIME",
+          accessMode: "PUBLIC",
+          isPractice: true,
+        });
+      }
+    } catch (e) {
+      console.warn("Could not pre-deploy practice quiz:", e);
+    }
+    const cleanPin = createdQuizPayload.pin ? createdQuizPayload.pin.replace(/\D/g, "") : "";
+    router.push(`/quiz?quizId=${encodeURIComponent(createdQuizPayload.quizId)}&pin=${cleanPin}&practice=true`);
+  };
+
+  const handleProceedToDeploy = () => {
+    if (!createdQuizPayload) return;
+    router.push(`/deploy?quizId=${encodeURIComponent(createdQuizPayload.quizId)}`);
   };
 
   const handleSimulateDrop = () => {
@@ -550,6 +586,170 @@ function CreateQuizContent() {
         </form>
         </ParallaxReveal>
       </div>
+
+      {/* Post-Creation Mission Popup Modal */}
+      {showMissionModal && createdQuizPayload && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-xl rounded-2xl glass-kage border border-primary/40 p-6 sm:p-8 shadow-2xl space-y-6 overflow-hidden bg-[#0c1020]">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-tertiary to-amber-accent" />
+            <div className="absolute -top-24 -right-24 w-60 h-60 rounded-full bg-primary/20 blur-[80px] pointer-events-none" />
+
+            {/* Modal Header */}
+            <div className="space-y-1.5 text-center sm:text-left">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/40 font-label-code text-[11px] font-semibold uppercase tracking-wider">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                <span>AI Synthesis Complete</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-headline-xl font-bold text-white tracking-tight">
+                What is your mission for this quiz?
+              </h2>
+              <p className="text-on-surface-variant font-body-md text-xs sm:text-sm line-clamp-1">
+                "{createdQuizPayload.title}" • {createdQuizPayload.questions?.length || questionCount} Questions
+              </p>
+            </div>
+
+            {/* Mission Choice Selector */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Option 1: Solo Practice */}
+              <button
+                type="button"
+                onClick={() => setMissionChoice("practice")}
+                className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between gap-3 ${
+                  missionChoice === "practice"
+                    ? "border-primary bg-primary/10 shadow-lg shadow-primary/20"
+                    : "border-outline-variant/30 bg-surface-container/50 hover:border-outline-variant/60"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="material-symbols-outlined text-2xl text-primary">
+                    psychology
+                  </span>
+                  <div
+                    className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      missionChoice === "practice"
+                        ? "border-primary bg-primary"
+                        : "border-outline-variant"
+                    }`}
+                  >
+                    {missionChoice === "practice" && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-black" />
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <h3 className="font-headline-sm text-sm font-bold text-white">
+                    Solo Practice Mode
+                  </h3>
+                  <p className="text-[11px] text-on-surface-variant mt-0.5 leading-snug">
+                    Take the quiz yourself immediately without revealing answers.
+                  </p>
+                </div>
+              </button>
+
+              {/* Option 2: Host for Others */}
+              <button
+                type="button"
+                onClick={() => setMissionChoice("host")}
+                className={`p-4 rounded-xl border text-left transition-all flex flex-col justify-between gap-3 ${
+                  missionChoice === "host"
+                    ? "border-tertiary bg-tertiary/10 shadow-lg shadow-tertiary/20"
+                    : "border-outline-variant/30 bg-surface-container/50 hover:border-outline-variant/60"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="material-symbols-outlined text-2xl text-tertiary">
+                    groups
+                  </span>
+                  <div
+                    className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      missionChoice === "host"
+                        ? "border-tertiary bg-tertiary"
+                        : "border-outline-variant"
+                    }`}
+                  >
+                    {missionChoice === "host" && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-black" />
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <h3 className="font-headline-sm text-sm font-bold text-white">
+                    Host / Deploy Room
+                  </h3>
+                  <p className="text-[11px] text-on-surface-variant mt-0.5 leading-snug">
+                    Deploy real-time live host lobby, schedule, or invite others via PIN.
+                  </p>
+                </div>
+              </button>
+            </div>
+
+            {/* Dynamic Content Based on Choice */}
+            {missionChoice === "practice" ? (
+              <div className="space-y-4 pt-1">
+                {/* Public Leaderboard Preview Checkbox */}
+                <label className="flex items-start gap-3 p-3.5 rounded-xl bg-surface-container/70 border border-outline-variant/30 cursor-pointer hover:border-primary/40 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={postPublicForLeaderboard}
+                    onChange={(e) => setPostPublicForLeaderboard(e.target.checked)}
+                    className="mt-0.5 rounded border-outline-variant bg-surface-container text-primary focus:ring-primary w-4 h-4"
+                  />
+                  <div className="space-y-0.5">
+                    <span className="block text-xs font-semibold text-white">
+                      Also post this quiz to public leaderboard
+                    </span>
+                    <span className="block text-[11px] text-on-surface-variant leading-relaxed">
+                      Allows other cadets to attempt this quiz and unlocks a real-time leaderboard preview so you can benchmark your score against community peers.
+                    </span>
+                  </div>
+                </label>
+
+                {/* Instant Start Button (Bypasses quiz data viewing) */}
+                <button
+                  type="button"
+                  disabled={isStartingPractice}
+                  onClick={handleStartPractice}
+                  className="w-full py-3.5 px-5 rounded-xl bg-primary hover:bg-primary/90 text-surface-container-lowest font-headline-sm font-bold text-sm shadow-xl shadow-primary/25 hover:shadow-primary/40 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-lg">play_arrow</span>
+                  <span>{isStartingPractice ? "Launching Practice..." : "Start Quiz Right Away 🚀"}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4 pt-1">
+                <div className="p-3.5 rounded-xl bg-surface-container/70 border border-outline-variant/30 space-y-1 text-xs">
+                  <span className="block font-semibold text-white">
+                    Deployment Command Center:
+                  </span>
+                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                    Set up Public, Private, or Organization-restricted access, select a live telemetry duration, or schedule a timed launch with automated email notifications.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleProceedToDeploy}
+                  className="w-full py-3.5 px-5 rounded-xl bg-gradient-to-r from-primary-container via-secondary-container to-tertiary hover:opacity-95 text-white font-headline-sm font-bold text-sm shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-lg">settings_suggest</span>
+                  <span>Proceed to Deployment Hub ⚙️</span>
+                </button>
+              </div>
+            )}
+
+            {/* Subtle Studio Editor Link */}
+            <div className="pt-2 text-center border-t border-outline-variant/20">
+              <button
+                type="button"
+                onClick={() => router.push(`/editor?quizId=${encodeURIComponent(createdQuizPayload.quizId)}`)}
+                className="text-[11px] font-label-code text-on-surface-variant hover:text-white transition-colors underline"
+              >
+                Or review & edit questions in Studio first →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="relative z-10 py-6 text-center text-xs text-on-surface-variant border-t border-outline-variant/20 backdrop-blur-md">

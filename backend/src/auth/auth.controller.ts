@@ -1,4 +1,16 @@
-import { Controller, Post, Body, UseInterceptors, Res, Req, UseGuards, HttpCode, UnauthorizedException, Get, } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  UseInterceptors,
+  Res,
+  Req,
+  UseGuards,
+  HttpCode,
+  UnauthorizedException,
+  Get,
+  Query,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterAuthDto, LoginAuthDto, LogoutAuthDto, VerifyOTPAuthDto, SendPasswordResetMailAuthDto, ResetPasswordAuthDto, ResendOTP } from './dto/auth.request.dto';
@@ -19,6 +31,12 @@ export class AuthController {
       sameSite: 'strict' as const,
       maxAge,
     };
+  }
+
+  @HttpCode(200)
+  @Get('check-username')
+  checkUsername(@Query('username') username: string) {
+    return this.authService.checkUsernameAvailability(username);
   }
 
   @UseGuards(JwtAuthGuard)

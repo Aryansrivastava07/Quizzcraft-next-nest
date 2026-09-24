@@ -1,14 +1,16 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, Suspense } from "react";
+import React, { useState, useEffect, useCallback, Suspense, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import CosmicCanvas from "@/components/canvas/CosmicCanvas";
 import Navbar from "@/components/layout/Navbar";
+import AuthFooter from "@/components/layout/AuthFooter";
 import ParallaxReveal from "@/components/ui/ParallaxReveal";
 import { useAuth } from "@/lib/auth/auth-context";
 import { profileService } from "@/lib/api/profile-service";
 import { formatApiError } from "@/lib/api/client";
+import { UserSettings } from "@/lib/api/types";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 
 type ActiveTab =
@@ -23,7 +25,6 @@ type ActiveTab =
 function ProfileContent() {
   const searchParams = useSearchParams();
   const initialTab = (searchParams.get("tab") as ActiveTab) || "profile";
-
   const [currentTab, setCurrentTab] = useState<ActiveTab>(initialTab);
 
   // Sync tab with URL search parameter if changed
@@ -45,60 +46,61 @@ function ProfileContent() {
     }
   }, [searchParams]);
 
-  const { user, isLoading: authLoading, logout } = useAuth();
+  const { user, isLoading: authLoading, logout, refreshUser } = useAuth();
   const [backendProfileLoading, setBackendProfileLoading] = useState(false);
   const [backendError, setBackendError] = useState<string | null>(null);
 
-  // Profile form state initialized from real auth user if available
-  const [fullName, setFullName] = useState(user?.username || "Aryan Srivastava");
-  const [username, setUsername] = useState(user?.username || "aryan");
-  const [email, setEmail] = useState(user?.email || "aryasrivastavaq@gmail.com");
-  const [institution, setInstitution] = useState("Stanford Q-Institute • Department of Physics");
-  const [bio, setBio] = useState(
-    "Curriculum designer and educator specializing in interactive quantum mechanics, cognitive science, and 3D spatial assessments."
-  );
+  // Profile form state initialized strictly from real auth user
+  const [fullName, setFullName] = useState(user?.username || "");
+  const [username, setUsername] = useState(user?.username || "");
+  const [email, setEmail] = useState(user?.email || "");
+  const [institution, setInstitution] = useState("");
+  const [bio, setBio] = useState("");
+  const [mobileNo, setMobileNo] = useState("");
+  const [address, setAddress] = useState("");
+  const [profilePicture, setProfilePicture] = useState(user?.profilePicture || "");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [userXp, setUserXp] = useState<number>(user?.xp || 0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (user?.email) {
-      setEmail(user.email);
-      if (user.username) {
-        setUsername(user.username);
-        setFullName(user.username);
-      }
-    }
-  }, [user]);
+  // Multi-email & Institutional Credentials state
+  const [linkedEmails, setLinkedEmails] = useState<string[]>(
+    user?.emails || (user?.email ? [user.email] : [])
+  );
+  const [newOrgEmail, setNewOrgEmail] = useState("");
+  const [showAddEmailForm, setShowAddEmailForm] = useState(false);
+  const [isLinkingEmail, setIsLinkingEmail] = useState(false);
+  const [linkEmailError, setLinkEmailError] = useState<string | null>(null);
+  const [unlinkingEmail, setUnlinkingEmail] = useState<string | null>(null);
 
-  const loadBackendProfile = useCallback(async () => {
-    const targetEmail = user?.email || email;
-    if (!targetEmail) return;
-    setBackendProfileLoading(true);
-    try {
-      const res = await profileService.getProfile(targetEmail);
-      if (res?.data) {
-        if (res.data.username) {
-          setUsername(res.data.username);
-          setFullName(res.data.username);
-        }
-        setBackendError(null);
-      }
-    } catch (err: any) {
-      setBackendError(formatApiError(err));
-    } finally {
-      setBackendProfileLoading(false);
-    }
-  }, [user?.email, email]);
+  // Avatar upload state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadBackendProfile();
-  }, [loadBackendProfile]);
+  // Real-time debounced username availability state
+  const [usernameCheck, setUsernameCheck] = useState<{
+    status: "idle" | "checking" | "available" | "taken" | "invalid";
+    message: string;
+  }>({ status: "idle", message: "" });
 
-  // Support ticket state
+  // Settings & Preferences state
+  const [settings, setSettings] = useState<UserSettings>({
+    starfieldMotion: true,
+    highContrast: false,
+    kioskAutoLock: true,
+    liveArenaInvites: true,
+    leaderboardSurgeAlerts: true,
+    weeklyDigest: true,
+  });
+
+  // Support ticket form state
   const [ticketSubject, setTicketSubject] = useState("");
   const [ticketCategory, setTicketCategory] = useState("Technical & Live Arena");
   const [ticketUrgency, setTicketUrgency] = useState("Normal");
   const [ticketMessage, setTicketMessage] = useState("");
   const [ticketSubmittedId, setTicketSubmittedId] = useState<string | null>(null);
+  const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
 
   // FAQs search and category state
   const [faqSearch, setFaqSearch] = useState("");
@@ -119,6 +121,220 @@ function ProfileContent() {
   const [attemptsLoading, setAttemptsLoading] = useState<boolean>(true);
   const [attemptsError, setAttemptsError] = useState<string | null>(null);
 
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Initial sync from user auth context
+  useEffect(() => {
+    if (user?.email) {
+      setEmail(user.email);
+      if (user.username) {
+        setUsername(user.username);
+        setFullName((prev) => prev || user.username);
+      }
+      if (user.profilePicture) {
+        setProfilePicture(user.profilePicture);
+      }
+      if (typeof (user as any).xp === "number") {
+        setUserXp((user as any).xp);
+      }
+      if (Array.isArray(user.emails) && user.emails.length > 0) {
+        setLinkedEmails(user.emails);
+      } else if (user.email) {
+        setLinkedEmails([user.email]);
+      }
+    }
+  }, [user]);
+
+  // Real-time debounced username availability checking
+  useEffect(() => {
+    if (!username) {
+      setUsernameCheck({ status: "invalid", message: "Username is required" });
+      return;
+    }
+    const clean = username.toLowerCase().trim();
+    if (!/^[a-z0-9]{3,30}$/.test(clean)) {
+      setUsernameCheck({
+        status: "invalid",
+        message: "Must be 3-30 lowercase letters or numbers with no symbols",
+      });
+      return;
+    }
+
+    if (user?.username && clean === user.username.toLowerCase()) {
+      setUsernameCheck({
+        status: "available",
+        message: "Current username",
+      });
+      return;
+    }
+
+    setUsernameCheck({ status: "checking", message: "Checking availability..." });
+    const timer = setTimeout(async () => {
+      try {
+        const res = await profileService.checkUsername(clean);
+        if (res?.data?.available) {
+          setUsernameCheck({
+            status: "available",
+            message: res.data.message || "Username is available",
+          });
+        } else {
+          setUsernameCheck({
+            status: "taken",
+            message: res?.data?.message || "Username is already taken",
+          });
+        }
+      } catch (err: any) {
+        const msg = err?.response?.data?.message || err?.message || "Username is unavailable";
+        setUsernameCheck({
+          status: "taken",
+          message: Array.isArray(msg) ? msg[0] : msg,
+        });
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [username, user?.username]);
+
+  // Compress and resize image client-side to ensure lightweight transmission
+  const compressImage = (file: File, maxWidth = 512, maxHeight = 512, quality = 0.85): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxWidth || height > maxHeight) {
+            if (width > height) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            } else {
+              width = Math.round((width * maxHeight) / height);
+              height = maxHeight;
+            }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            resolve(event.target?.result as string);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL("image/jpeg", quality);
+          resolve(compressed);
+        };
+        img.onerror = () => reject(new Error("Failed to load image"));
+      };
+      reader.onerror = () => reject(new Error("Failed to read image"));
+    });
+  };
+
+  // Handle uploading avatar file directly from device
+  const handleAvatarFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setAvatarError(null);
+
+    if (!file.type.startsWith("image/")) {
+      const msg = "Please select a valid image file (PNG, JPG, WEBP)";
+      setAvatarError(msg);
+      setToastMessage(msg);
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
+
+    // Check raw file size limit (e.g. max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      const msg = "Image size too large. Maximum file size is 10MB.";
+      setAvatarError(msg);
+      setToastMessage(msg);
+      setTimeout(() => setToastMessage(null), 4000);
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    try {
+      const compressedBase64 = await compressImage(file);
+      setProfilePicture(compressedBase64);
+      await profileService.updateProfile({
+        email: user?.email || email,
+        profilePicture: compressedBase64,
+      });
+      await refreshUser();
+      setAvatarError(null);
+      setToastMessage("Profile picture updated successfully!");
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch (err: any) {
+      console.error("Failed to update profile picture:", err);
+      const isTooLarge =
+        err?.statusCode === 413 ||
+        err?.status === 413 ||
+        err?.message?.toLowerCase().includes("too large") ||
+        err?.response?.data?.message?.toLowerCase().includes("too large");
+      const errorMsg = isTooLarge
+        ? "Image size too large. Please select a smaller photo."
+        : "Failed to upload image. Please try again.";
+      setAvatarError(errorMsg);
+      setToastMessage(errorMsg);
+      setTimeout(() => setToastMessage(null), 4000);
+    } finally {
+      setIsUploadingAvatar(false);
+      if (e.target) e.target.value = "";
+    }
+  };
+
+  // Load complete profile and settings from backend
+  const loadBackendProfile = useCallback(async () => {
+    const targetEmail = user?.email || email;
+    if (!targetEmail) return;
+    setBackendProfileLoading(true);
+    try {
+      const res = await profileService.getProfile(targetEmail);
+      if (res?.data) {
+        const d = res.data;
+        if (d.username) setUsername(d.username);
+        if (d.fullName) setFullName(d.fullName);
+        else if (d.username) setFullName(d.username);
+        if (d.email) setEmail(d.email);
+        if (d.institution) setInstitution(d.institution);
+        if (d.bio) setBio(d.bio);
+        if (d.profilePicture) setProfilePicture(d.profilePicture);
+        if (d.mobileNo) setMobileNo(String(d.mobileNo));
+        if (d.address) setAddress(d.address);
+        if (d.dateOfBirth) setDateOfBirth(d.dateOfBirth.slice(0, 10));
+        if (typeof d.xp === "number") setUserXp(d.xp);
+        if (Array.isArray(d.emails) && d.emails.length > 0) {
+          setLinkedEmails(d.emails);
+        } else if (d.email) {
+          setLinkedEmails([d.email]);
+        }
+
+        if (d.settings) {
+          setSettings(d.settings);
+          if (typeof document !== "undefined") {
+            document.documentElement.setAttribute(
+              "data-starfield-motion",
+              String(d.settings.starfieldMotion)
+            );
+            document.documentElement.setAttribute(
+              "data-high-contrast",
+              String(d.settings.highContrast)
+            );
+          }
+        }
+        setBackendError(null);
+      }
+    } catch (err: any) {
+      setBackendError(formatApiError(err));
+    } finally {
+      setBackendProfileLoading(false);
+    }
+  }, [user?.email, email]);
+
   const loadCreatedQuizzes = useCallback(async () => {
     setQuizzesLoading(true);
     setQuizzesError(null);
@@ -133,7 +349,13 @@ function ProfileContent() {
           avgScore: "Active",
           status: "ACTIVE",
           topic: q.questions?.[0]?.question ? "AI & Science" : "General Study",
-          date: q.createdAt ? new Date(q.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Active Node",
+          date: q.createdAt
+            ? new Date(q.createdAt).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })
+            : "Active Node",
         }));
         setCreatedQuizzes(mapped);
       }
@@ -156,17 +378,29 @@ function ProfileContent() {
         const scoreVal = typeof attempt.score === "number" ? attempt.score : 0;
         const scorePct = totalQ > 0 ? `${Math.round((scoreVal / totalQ) * 100)}%` : "0%";
         const xpEarned = scoreVal * 150;
-        const status = attempt.isActive ? "IN PROGRESS" : (scoreVal / totalQ >= 0.8 ? "EXCELLENT" : "COMPLETED");
+        const status = attempt.isActive
+          ? "IN PROGRESS"
+          : scoreVal / totalQ >= 0.8
+          ? "EXCELLENT"
+          : "COMPLETED";
 
         return {
           title: attempt.title || "Interactive Arena Challenge",
-          sessionCode: attempt.sessionId ? `SES-${attempt.sessionId.slice(0, 8).toUpperCase()}` : "ACTIVE-RUN",
+          sessionCode: attempt.sessionId
+            ? `SES-${attempt.sessionId.slice(0, 8).toUpperCase()}`
+            : "ACTIVE-RUN",
           scorePct,
           correctAnswers: `${scoreVal}/${totalQ}`,
           xpEarned,
           timeSpent: "Active Session",
           rank: attempt.isActive ? "Active" : "Evaluated",
-          date: attempt.lastUpdateAt ? new Date(attempt.lastUpdateAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Recent",
+          date: attempt.lastUpdateAt
+            ? new Date(attempt.lastUpdateAt).toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })
+            : "Recent",
           status,
           sessionId: attempt.sessionId,
           quizId: attempt.quizId,
@@ -182,9 +416,211 @@ function ProfileContent() {
   }, []);
 
   useEffect(() => {
+    loadBackendProfile();
     loadCreatedQuizzes();
     loadAttemptedQuizzes();
-  }, [loadCreatedQuizzes, loadAttemptedQuizzes]);
+  }, [loadBackendProfile, loadCreatedQuizzes, loadAttemptedQuizzes]);
+
+  // Handle saving profile changes to backend
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBackendError(null);
+
+    const cleanUsername = username.toLowerCase().trim();
+    if (!/^[a-z0-9]{3,30}$/.test(cleanUsername)) {
+      setToastMessage("Username must contain only lowercase letters and numbers (3-30 characters)");
+      setTimeout(() => setToastMessage(null), 3000);
+      return;
+    }
+    if (usernameCheck.status === "taken") {
+      setToastMessage("Please choose an available username before saving");
+      setTimeout(() => setToastMessage(null), 3000);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await profileService.updateProfile({
+        email,
+        userName: cleanUsername,
+        fullName,
+        institution,
+        bio,
+        profilePicture,
+        mobileNo: mobileNo ? Number(mobileNo) : null,
+        address,
+        dateOfBirth: dateOfBirth || null,
+        xp: userDatabaseXp,
+      });
+      await refreshUser();
+      setToastMessage("Profile settings updated successfully!");
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch (err: any) {
+      setBackendError(formatApiError(err));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handle linking institutional / additional email
+  const handleLinkNewEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLinkEmailError(null);
+    const clean = newOrgEmail.trim().toLowerCase();
+    if (!clean || !clean.includes("@")) {
+      setLinkEmailError("Please provide a valid email address");
+      return;
+    }
+    if (linkedEmails.includes(clean)) {
+      setLinkEmailError("This email is already linked to your account");
+      return;
+    }
+
+    setIsLinkingEmail(true);
+    try {
+      const res = await profileService.linkEmail(clean);
+      if (res?.data?.emails) {
+        setLinkedEmails(res.data.emails);
+      } else {
+        setLinkedEmails((prev) => [...prev, clean]);
+      }
+      await refreshUser();
+      setNewOrgEmail("");
+      setShowAddEmailForm(false);
+      setToastMessage("Institutional / Secondary email linked successfully!");
+      setTimeout(() => setToastMessage(null), 3500);
+    } catch (err: any) {
+      console.error("Failed to link email:", err);
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Failed to link email. It might already belong to another account.";
+      setLinkEmailError(Array.isArray(msg) ? msg[0] : msg);
+    } finally {
+      setIsLinkingEmail(false);
+    }
+  };
+
+  // Handle unlinking secondary email
+  const handleUnlinkEmail = async (emailToRemove: string) => {
+    if (emailToRemove === user?.email || emailToRemove === email) {
+      setToastMessage("Primary account email cannot be unlinked.");
+      setTimeout(() => setToastMessage(null), 3000);
+      return;
+    }
+    setUnlinkingEmail(emailToRemove);
+    try {
+      const res = await profileService.unlinkEmail(emailToRemove);
+      if (res?.data?.emails) {
+        setLinkedEmails(res.data.emails);
+      } else {
+        setLinkedEmails((prev) => prev.filter((e) => e !== emailToRemove));
+      }
+      await refreshUser();
+      setToastMessage(`Email ${emailToRemove} unlinked.`);
+      setTimeout(() => setToastMessage(null), 3000);
+    } catch (err: any) {
+      console.error("Failed to unlink email:", err);
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Failed to unlink email.";
+      setToastMessage(Array.isArray(msg) ? msg[0] : msg);
+      setTimeout(() => setToastMessage(null), 3500);
+    } finally {
+      setUnlinkingEmail(null);
+    }
+  };
+
+  // Handle saving a single setting change immediately to backend
+  const handleToggleSetting = async (key: keyof UserSettings, value: boolean) => {
+    const updated = { ...settings, [key]: value };
+    setSettings(updated);
+
+    if (typeof document !== "undefined") {
+      if (key === "starfieldMotion") {
+        document.documentElement.setAttribute("data-starfield-motion", String(value));
+      }
+      if (key === "highContrast") {
+        document.documentElement.setAttribute("data-high-contrast", String(value));
+      }
+    }
+
+    try {
+      await profileService.updateSettings({ [key]: value });
+      setToastMessage("Preferences updated in database");
+      setTimeout(() => setToastMessage(null), 2500);
+    } catch (err: any) {
+      console.error("Failed to update setting in database:", err);
+      setToastMessage("Notice: Setting saved locally");
+      setTimeout(() => setToastMessage(null), 2500);
+    }
+  };
+
+  // Handle support ticket submission
+  const handleTicketSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ticketSubject.trim() || !ticketMessage.trim()) return;
+    setIsSubmittingTicket(true);
+    setBackendError(null);
+    try {
+      const res = await profileService.createTicket({
+        category: ticketCategory,
+        urgency: ticketUrgency,
+        subject: ticketSubject,
+        message: ticketMessage,
+      });
+      const generatedId =
+        res?.data?.ticketId || `TICK-${Math.floor(1000 + Math.random() * 9000)}-QC`;
+      setTicketSubmittedId(generatedId);
+      setToastMessage(
+        `Support ticket ${generatedId} submitted! Confirmation email dispatched.`
+      );
+      setTicketSubject("");
+      setTicketMessage("");
+      setTimeout(() => setToastMessage(null), 5000);
+    } catch (err: any) {
+      setBackendError(formatApiError(err));
+    } finally {
+      setIsSubmittingTicket(false);
+    }
+  };
+
+  // Telemetry Calculations
+  const userDatabaseXp = userXp || (user as any)?.xp || 0;
+  const quizEarnedXp = attemptedQuizzes.reduce((acc, curr) => acc + (curr.xpEarned || 0), 0);
+  const totalExp = userDatabaseXp + quizEarnedXp;
+  const avgScorePct =
+    attemptedQuizzes.length > 0
+      ? Math.round(
+          attemptedQuizzes.reduce((sum, a) => {
+            const pctNum = parseInt(a.scorePct, 10) || 0;
+            return sum + pctNum;
+          }, 0) / attemptedQuizzes.length
+        )
+      : 0;
+  const excellentAttemptsCount = attemptedQuizzes.filter(
+    (a) => a.status === "EXCELLENT" || parseInt(a.scorePct, 10) >= 80
+  ).length;
+  const winRate =
+    attemptedQuizzes.length > 0
+      ? `${Math.round((excellentAttemptsCount / attemptedQuizzes.length) * 100)}%`
+      : "0%";
+
+  const userLevel = Math.max(1, Math.floor(totalExp / 1000) + 1);
+  const userRankTitle =
+    totalExp >= 10000
+      ? "Grandmaster"
+      : totalExp >= 5000
+      ? "Master Quizzer"
+      : totalExp >= 2000
+      ? "Scholar"
+      : "Novice";
+
+  const displayName = fullName || username || user?.username || "Educator";
+  const displayId = (user?.userId || (user as any)?._id || "QC-USER")
+    .slice(-8)
+    .toUpperCase();
 
   // FAQs data
   const faqs = [
@@ -221,7 +657,7 @@ function ProfileContent() {
     {
       category: "Account & Access",
       q: "Do students need to create an account to join a game?",
-      a: "No credit card or complex registration is required. Students enter the 6-digit room PIN or follow a direct link, enter their name or sign in via Google/GitHub SSO, and immediately enter the arena.",
+      a: "Students enter the 6-digit room PIN or follow a direct link, log in or authenticate, and immediately participate in the live arena.",
     },
   ];
 
@@ -241,50 +677,6 @@ function ProfileContent() {
       q.id.toLowerCase().includes(quizSearch.toLowerCase());
     return matchesFilter && matchesSearch;
   });
-
-  const totalExp = attemptedQuizzes.reduce((acc, curr) => acc + (curr.xpEarned || 0), 0);
-  const avgScorePct = attemptedQuizzes.length > 0
-    ? Math.round(
-        attemptedQuizzes.reduce((sum, a) => {
-          const pctNum = parseInt(a.scorePct, 10) || 0;
-          return sum + pctNum;
-        }, 0) / attemptedQuizzes.length
-      )
-    : 0;
-  const excellentAttemptsCount = attemptedQuizzes.filter(
-    (a) => a.status === "EXCELLENT" || parseInt(a.scorePct, 10) >= 80
-  ).length;
-  const winRate = attemptedQuizzes.length > 0
-    ? `${Math.round((excellentAttemptsCount / attemptedQuizzes.length) * 100)}%`
-    : "0%";
-
-  const [isSaving, setIsSaving] = useState(false);
-
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBackendError(null);
-    setIsSaving(true);
-    try {
-      await profileService.updateProfile({
-        email,
-        userName: username,
-      });
-      setToastMessage("Profile settings updated successfully on backend!");
-      setTimeout(() => setToastMessage(null), 3000);
-    } catch (err: any) {
-      setBackendError(formatApiError(err));
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleTicketSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newId = `TICK-${Math.floor(1000 + Math.random() * 9000)}-QC`;
-    setTicketSubmittedId(newId);
-    setToastMessage(`Support ticket ${newId} received! Our team will respond shortly.`);
-    setTimeout(() => setToastMessage(null), 4000);
-  };
 
   return (
     <div className="min-h-screen text-on-surface font-body-md selection:bg-primary selection:text-on-primary antialiased relative flex flex-col justify-between overflow-x-hidden">
@@ -312,7 +704,7 @@ function ProfileContent() {
             </span>
             <div className="flex-1">
               <div className="flex items-center justify-between gap-3">
-                <p className="font-semibold text-red-200 text-sm">Backend Communication Error</p>
+                <p className="font-semibold text-red-200 text-sm">Server Communication Notice</p>
                 <button
                   type="button"
                   onClick={loadBackendProfile}
@@ -322,9 +714,6 @@ function ProfileContent() {
                 </button>
               </div>
               <p className="mt-1 opacity-90 leading-relaxed break-words">{backendError}</p>
-              <p className="mt-2 text-[11px] text-red-400/80 font-mono">
-                Target Backend Endpoint: http://localhost:5000/api/profile?email={encodeURIComponent(email)}
-              </p>
             </div>
           </div>
         )}
@@ -338,38 +727,82 @@ function ProfileContent() {
             <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
               {/* Left: Avatar & Identity */}
               <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-5">
-                <div className="relative group">
-                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full ring-4 ring-primary/40 p-1 bg-surface-container overflow-hidden shadow-2xl shadow-primary/30 flex items-center justify-center">
-                    <img
-                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuDasytanrbPihuNOGRp9pWMUk_BlFIHcPv90sw-p1_rSOAFpw9HvuNXCOWuRwYsGIbQcycEHE91t3zCLi8BdMj3pHud7lkaWrZmpDBZ2O4GTi4_T28BGkD-wjrkjKIdAaOxRxZNTTKKUoknFrp4iGRC3sApEhvKU54eGne0XdHQ6ScX7wtPZhuShxuS4-MLn7S7HEPG7TrqeD_cJxaj_-DwfM1DbpYfbR8DjeLxhaXTpxNlxFsOVrTm"
-                      alt={fullName}
-                      className="w-full h-full object-cover rounded-full group-hover:scale-105 transition-transform duration-300"
+                <div className="relative group flex flex-col items-center">
+                  <div className="relative">
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-24 h-24 sm:w-28 sm:h-28 rounded-full ring-4 ring-primary/40 p-1 bg-surface-container overflow-hidden shadow-2xl shadow-primary/30 flex items-center justify-center relative cursor-pointer group"
+                      title="Click to Upload Profile Picture"
+                    >
+                      {profilePicture ? (
+                        <img
+                          src={profilePicture}
+                          alt={displayName}
+                          className="w-full h-full object-cover rounded-full group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-full rounded-full bg-gradient-to-tr from-primary-container to-tertiary/40 flex items-center justify-center text-white font-headline-xl font-bold text-2xl">
+                          {(displayName || "E").slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+
+                      {/* Centered Upload Overlay */}
+                      <div
+                        className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity duration-200 rounded-full"
+                      >
+                        {isUploadingAvatar ? (
+                          <span className="material-symbols-outlined text-2xl animate-spin">progress_activity</span>
+                        ) : (
+                          <>
+                            <span className="material-symbols-outlined text-2xl">photo_camera</span>
+                            <span className="text-[10px] font-semibold mt-0.5">Upload</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Hidden file input for uploading profile pic */}
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleAvatarFileSelect}
+                    />
+
+                    {/* Online Badge */}
+                    <span
+                      className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-emerald-400 border-2 border-surface-container-lowest shadow-md z-10"
+                      title="Active Account"
                     />
                   </div>
-                  {/* Online Badge */}
-                  <span
-                    className="absolute bottom-1 right-2 w-4 h-4 rounded-full bg-emerald-400 border-2 border-surface-container-lowest shadow-md"
-                    title="Active Now"
-                  />
+
+                  {/* Explicit UI Alert if Image Size is Too Large */}
+                  {avatarError && (
+                    <div className="mt-2.5 px-3 py-1.5 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-[11px] font-label-code flex items-center gap-1.5 animate-fadeIn max-w-[240px] text-center justify-center">
+                      <span className="material-symbols-outlined text-sm text-red-400 shrink-0">error</span>
+                      <span className="leading-tight">{avatarError}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
                   <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
                     <h1 className="text-2xl sm:text-3xl font-headline-xl text-white font-bold tracking-tight">
-                      {fullName}
+                      {displayName}
                     </h1>
                     <span className="px-2.5 py-0.5 rounded-full bg-primary-container/30 text-primary-fixed border border-primary/40 font-label-code text-xs font-semibold flex items-center gap-1">
                       <span className="material-symbols-outlined text-xs text-primary">
-                        verified
+                        {user?.verified ? "verified" : "shield"}
                       </span>
-                      <span>Verified Educator</span>
+                      <span>{user?.verified ? "Verified Member" : "Active Member"}</span>
                     </span>
                   </div>
 
                   <p className="font-label-code text-xs sm:text-sm text-on-surface-variant flex items-center justify-center sm:justify-start gap-1.5">
-                    <span className="text-tertiary">@{username}</span>
+                    <span className="text-tertiary">@{username || "user"}</span>
                     <span>•</span>
-                    <span>{email}</span>
+                    <span>{email || "user@quizzcraft.app"}</span>
                   </p>
 
                   <div className="pt-1 flex flex-wrap items-center justify-center sm:justify-start gap-3 text-xs font-label-code text-on-surface-variant">
@@ -377,14 +810,21 @@ function ProfileContent() {
                       <span className="material-symbols-outlined text-sm text-outline">
                         calendar_month
                       </span>
-                      <span>Joined Recently</span>
+                      <span>
+                        {user?.createdAt
+                          ? `Joined ${new Date(user.createdAt).toLocaleDateString("en-US", {
+                              month: "short",
+                              year: "numeric",
+                            })}`
+                          : "Active Member"}
+                      </span>
                     </span>
                     <span>•</span>
                     <span className="flex items-center gap-1">
                       <span className="material-symbols-outlined text-sm text-tertiary">
                         school
                       </span>
-                      <span>Level 14 • Quizmaster</span>
+                      <span>Level {userLevel} • {userRankTitle}</span>
                     </span>
                   </div>
                 </div>
@@ -413,7 +853,7 @@ function ProfileContent() {
           </div>
         </ParallaxReveal>
 
-        {/* Elevated Stat Badges (Inspired by the Reference Image Pills, but modern & data-rich) */}
+        {/* Elevated Stat Badges (Pure real data from database) */}
         <ParallaxReveal direction="up" distance={20} delay={60} duration={700}>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
             {/* Pill 1: Quizzes Created */}
@@ -444,7 +884,7 @@ function ProfileContent() {
               </span>
             </div>
 
-            {/* Pill 2: Average Score (Emerald Star) */}
+            {/* Pill 2: Average Score */}
             <div className="p-4 rounded-2xl bg-surface-container-low/75 border border-emerald-500/30 hover:border-emerald-500/60 transition-all backdrop-blur-xl shadow-lg flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
@@ -456,20 +896,28 @@ function ProfileContent() {
                   </span>
                   <div className="flex items-baseline gap-1.5">
                     <span className="font-stat-counter text-2xl font-bold text-emerald-400">
-                      {attemptsLoading ? "..." : attemptedQuizzes.length > 0 ? `${avgScorePct}%` : "0%"}
+                      {attemptsLoading ? "..." : attemptedQuizzes.length > 0 ? `${avgScorePct}%` : "—"}
                     </span>
                     <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-label-code font-bold">
-                      {avgScorePct >= 90 ? "Grade A+" : avgScorePct >= 75 ? "Grade A" : avgScorePct >= 50 ? "Grade B" : "Unranked"}
+                      {attemptedQuizzes.length === 0
+                        ? "No Attempts"
+                        : avgScorePct >= 90
+                        ? "Grade A+"
+                        : avgScorePct >= 75
+                        ? "Grade A"
+                        : avgScorePct >= 50
+                        ? "Grade B"
+                        : "Evaluated"}
                     </span>
                   </div>
                 </div>
               </div>
               <span className="text-[11px] font-label-code text-emerald-400 font-bold">
-                {attemptedQuizzes.length > 0 ? "Top Score" : "No Attempts"}
+                {attemptedQuizzes.length > 0 ? "Real Score" : "Pending"}
               </span>
             </div>
 
-            {/* Pill 3: Quizzes Submitted / Attempted */}
+            {/* Pill 3: Quizzes Attempted */}
             <div
               onClick={() => setCurrentTab("quiz-attempted")}
               className="p-4 rounded-2xl bg-surface-container-low/75 border border-tertiary/30 hover:border-tertiary/60 transition-all cursor-pointer backdrop-blur-xl group shadow-lg flex items-center justify-between"
@@ -497,7 +945,7 @@ function ProfileContent() {
               </span>
             </div>
 
-            {/* Pill 4: Total EXP & Fleet Standing */}
+            {/* Pill 4: Total EXP */}
             <div className="p-4 rounded-2xl bg-surface-container-low/75 border border-amber-accent/30 hover:border-amber-accent/60 transition-all backdrop-blur-xl shadow-lg flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-xl bg-amber-accent/15 border border-amber-accent/40 flex items-center justify-center text-amber-accent">
@@ -516,7 +964,7 @@ function ProfileContent() {
                 </div>
               </div>
               <span className="text-[11px] font-label-code text-amber-accent font-bold">
-                {totalExp >= 10000 ? "Grandmaster" : totalExp >= 3000 ? "Navigator" : "Cadet"}
+                {userRankTitle}
               </span>
             </div>
           </div>
@@ -563,10 +1011,10 @@ function ProfileContent() {
                   >
                     <div className="flex items-center gap-2.5">
                       <span className="material-symbols-outlined text-lg">edit_document</span>
-                      <span>Quiz Created</span>
+                      <span>My Quizzes</span>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full bg-surface-container-high text-[10px] font-label-code font-bold">
-                      {quizzesLoading ? "..." : createdQuizzes.length}
+                    <span className="text-[10px] font-label-code px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant">
+                      {createdQuizzes.length}
                     </span>
                   </button>
 
@@ -580,17 +1028,17 @@ function ProfileContent() {
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <span className="material-symbols-outlined text-lg">check_circle</span>
+                      <span className="material-symbols-outlined text-lg">fact_check</span>
                       <span>Quiz Attempted</span>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full bg-surface-container-high text-[10px] font-label-code font-bold">
-                      {attemptsLoading ? "..." : attemptedQuizzes.length}
+                    <span className="text-[10px] font-label-code px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant">
+                      {attemptedQuizzes.length}
                     </span>
                   </button>
                 </div>
 
                 {/* Group 2: Support & Knowledge */}
-                <div className="space-y-1.5 pt-3 border-t border-outline-variant/20">
+                <div className="space-y-1.5">
                   <span className="font-headline-sm text-[11px] font-bold text-outline uppercase tracking-wider px-3">
                     Support &amp; Community
                   </span>
@@ -605,12 +1053,9 @@ function ProfileContent() {
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <span className="material-symbols-outlined text-lg">help_center</span>
+                      <span className="material-symbols-outlined text-lg">help</span>
                       <span>FAQs</span>
                     </div>
-                    <span className="px-2 py-0.5 rounded-full bg-surface-container-high text-[10px] font-label-code font-bold">
-                      7
-                    </span>
                   </button>
 
                   <button
@@ -623,17 +1068,16 @@ function ProfileContent() {
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <span className="material-symbols-outlined text-lg">headset_mic</span>
+                      <span className="material-symbols-outlined text-lg">support_agent</span>
                       <span>Contact Support</span>
                     </div>
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" title="Online" />
                   </button>
                 </div>
 
-                {/* Group 3: User & Preferences */}
-                <div className="space-y-1.5 pt-3 border-t border-outline-variant/20">
+                {/* Group 3: System Preferences */}
+                <div className="space-y-1.5">
                   <span className="font-headline-sm text-[11px] font-bold text-outline uppercase tracking-wider px-3">
-                    User
+                    Preferences
                   </span>
 
                   <button
@@ -647,9 +1091,8 @@ function ProfileContent() {
                   >
                     <div className="flex items-center gap-2.5">
                       <span className="material-symbols-outlined text-lg">notifications</span>
-                      <span>Notification</span>
+                      <span>Notifications</span>
                     </div>
-                    <span className="w-2 h-2 rounded-full bg-tertiary animate-pulse" />
                   </button>
 
                   <button
@@ -670,16 +1113,17 @@ function ProfileContent() {
 
                 {/* Sidebar Footer Logout */}
                 <div className="pt-3 border-t border-outline-variant/20">
-                  <Link
-                    href="/auth"
-                    className="w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-on-surface-variant hover:text-error hover:bg-error-container/10 transition-colors text-xs font-headline-sm"
+                  <button
+                    type="button"
+                    onClick={() => logout()}
+                    className="w-full flex items-center justify-between px-3.5 py-2 rounded-xl text-on-surface-variant hover:text-error hover:bg-error-container/10 transition-colors text-xs font-headline-sm cursor-pointer"
                   >
                     <span className="flex items-center gap-2">
                       <span className="material-symbols-outlined text-base">logout</span>
-                      <span>Switch Account</span>
+                      <span>Sign Out</span>
                     </span>
-                    <span className="text-[10px] font-label-code text-outline">SSO</span>
-                  </Link>
+                    <span className="text-[10px] font-label-code text-outline">SECURE</span>
+                  </button>
                 </div>
               </div>
             </ParallaxReveal>
@@ -701,7 +1145,7 @@ function ProfileContent() {
                       </p>
                     </div>
                     <span className="font-label-code text-xs px-2.5 py-1 rounded-full bg-tertiary/10 text-tertiary border border-tertiary/30 font-semibold">
-                      ID: ARYAN-9824
+                      ID: {displayId}
                     </span>
                   </div>
 
@@ -717,15 +1161,21 @@ function ProfileContent() {
                           required
                           value={fullName}
                           onChange={(e) => setFullName(e.target.value)}
+                          placeholder="Your display name"
                           className="w-full px-4 py-2.5 rounded-xl bg-surface-container/60 border border-outline-variant/40 text-on-surface text-xs focus:outline-none focus:border-primary transition-colors"
                         />
                       </div>
 
                       {/* Username */}
                       <div className="space-y-1.5">
-                        <label className="block text-xs font-semibold text-white uppercase tracking-wider font-headline-sm">
-                          Username
-                        </label>
+                        <div className="flex items-center justify-between">
+                          <label className="block text-xs font-semibold text-white uppercase tracking-wider font-headline-sm">
+                            Username
+                          </label>
+                          <span className="text-[10px] font-label-code text-on-surface-variant">
+                            lowercase alphanumeric only
+                          </span>
+                        </div>
                         <div className="relative">
                           <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-outline font-label-code text-xs">
                             @
@@ -734,10 +1184,56 @@ function ProfileContent() {
                             type="text"
                             required
                             value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            className="w-full pl-8 pr-4 py-2.5 rounded-xl bg-surface-container/60 border border-outline-variant/40 text-on-surface text-xs focus:outline-none focus:border-primary transition-colors"
+                            onChange={(e) =>
+                              setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ""))
+                            }
+                            placeholder="username"
+                            className={`w-full pl-8 pr-10 py-2.5 rounded-xl bg-surface-container/60 border text-on-surface text-xs focus:outline-none transition-colors ${
+                              usernameCheck.status === "taken" || usernameCheck.status === "invalid"
+                                ? "border-red-500/50 focus:border-red-500"
+                                : usernameCheck.status === "available"
+                                ? "border-emerald-500/50 focus:border-emerald-500"
+                                : "border-outline-variant/40 focus:border-primary"
+                            }`}
                           />
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
+                            {usernameCheck.status === "checking" && (
+                              <span className="material-symbols-outlined text-sm text-tertiary animate-spin">
+                                progress_activity
+                              </span>
+                            )}
+                            {usernameCheck.status === "available" && (
+                              <span className="material-symbols-outlined text-sm text-emerald-400">
+                                check_circle
+                              </span>
+                            )}
+                            {usernameCheck.status === "taken" && (
+                              <span className="material-symbols-outlined text-sm text-red-400">
+                                cancel
+                              </span>
+                            )}
+                            {usernameCheck.status === "invalid" && (
+                              <span className="material-symbols-outlined text-sm text-amber-400">
+                                error
+                              </span>
+                            )}
+                          </div>
                         </div>
+                        {usernameCheck.message && (
+                          <p
+                            className={`text-[11px] font-label-code flex items-center gap-1 ${
+                              usernameCheck.status === "available"
+                                ? "text-emerald-400"
+                                : usernameCheck.status === "taken"
+                                ? "text-red-400"
+                                : usernameCheck.status === "checking"
+                                ? "text-tertiary"
+                                : "text-amber-400"
+                            }`}
+                          >
+                            {usernameCheck.message}
+                          </p>
+                        )}
                       </div>
 
                       {/* Email */}
@@ -753,9 +1249,10 @@ function ProfileContent() {
                         <input
                           type="email"
                           required
+                          disabled
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          className="w-full px-4 py-2.5 rounded-xl bg-surface-container/60 border border-outline-variant/40 text-on-surface text-xs focus:outline-none focus:border-primary transition-colors"
+                          className="w-full px-4 py-2.5 rounded-xl bg-surface-container/40 border border-outline-variant/30 text-on-surface/80 text-xs focus:outline-none cursor-not-allowed"
                         />
                       </div>
 
@@ -768,8 +1265,61 @@ function ProfileContent() {
                           type="text"
                           value={institution}
                           onChange={(e) => setInstitution(e.target.value)}
+                          placeholder="University, school, or organization"
                           className="w-full px-4 py-2.5 rounded-xl bg-surface-container/60 border border-outline-variant/40 text-on-surface text-xs focus:outline-none focus:border-primary transition-colors"
                         />
+                      </div>
+
+                      {/* Mobile No */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-white uppercase tracking-wider font-headline-sm">
+                          Phone Number (Optional)
+                        </label>
+                        <input
+                          type="tel"
+                          value={mobileNo}
+                          onChange={(e) => setMobileNo(e.target.value)}
+                          placeholder="e.g. +1 555-0199"
+                          className="w-full px-4 py-2.5 rounded-xl bg-surface-container/60 border border-outline-variant/40 text-on-surface text-xs focus:outline-none focus:border-primary transition-colors"
+                        />
+                      </div>
+
+                      {/* Address / Location */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-white uppercase tracking-wider font-headline-sm">
+                          Base Location
+                        </label>
+                        <input
+                          type="text"
+                          value={address}
+                          onChange={(e) => setAddress(e.target.value)}
+                          placeholder="City, Country"
+                          className="w-full px-4 py-2.5 rounded-xl bg-surface-container/60 border border-outline-variant/40 text-on-surface text-xs focus:outline-none focus:border-primary transition-colors"
+                        />
+                      </div>
+
+                      {/* Date of Birth */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-white uppercase tracking-wider font-headline-sm">
+                          Date of Birth
+                        </label>
+                        <input
+                          type="date"
+                          value={dateOfBirth}
+                          onChange={(e) => setDateOfBirth(e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-xl bg-surface-container/60 border border-outline-variant/40 text-on-surface text-xs focus:outline-none focus:border-primary transition-colors"
+                        />
+                      </div>
+
+                      {/* XP Points */}
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-white uppercase tracking-wider font-headline-sm">
+                          Total Account XP
+                        </label>
+                        <div className="w-full px-4 py-2.5 rounded-xl bg-surface-container/40 border border-outline-variant/30 text-amber-accent text-xs font-label-code font-bold flex items-center justify-between">
+                          <span>{totalExp.toLocaleString()} XP</span>
+                          <span className="text-[10px] text-on-surface-variant font-normal">Level {userLevel} • {userRankTitle}</span>
+                        </div>
                       </div>
                     </div>
 
@@ -782,65 +1332,202 @@ function ProfileContent() {
                         rows={3}
                         value={bio}
                         onChange={(e) => setBio(e.target.value)}
+                        placeholder="Tell students and colleagues about your academic specialty..."
                         className="w-full p-3.5 rounded-xl bg-surface-container/60 border border-outline-variant/40 text-on-surface text-xs focus:outline-none focus:border-primary transition-colors resize-none"
                       />
                     </div>
 
-                    {/* Authentication & SSO Integrations */}
-                    <div className="pt-4 border-t border-outline-variant/20 space-y-3">
-                      <span className="block text-xs font-headline-sm font-semibold text-white uppercase tracking-wider">
-                        Linked Authentication Providers
-                      </span>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div className="p-3.5 rounded-xl bg-surface-container/50 border border-outline-variant/30 flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2.5">
-                            <span className="font-bold text-white">Google SSO</span>
-                            <span className="text-[11px] text-on-surface-variant font-label-code">
-                              {email}
-                            </span>
-                          </div>
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-label-code text-[10px] font-bold">
-                            Connected
+                    {/* Linked Authentication & Institutional Emails */}
+                    <div className="pt-4 border-t border-outline-variant/20 space-y-3.5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                          <span className="block text-xs font-headline-sm font-semibold text-white uppercase tracking-wider">
+                            Linked Authentication &amp; Institutional Emails
                           </span>
+                          <p className="text-[11px] font-label-code text-on-surface-variant mt-0.5">
+                            Log in with any linked email and seamlessly access private organization quizzes matching your domain.
+                          </p>
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAddEmailForm(!showAddEmailForm);
+                            setLinkEmailError(null);
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-surface-container-high hover:bg-surface-container border border-outline-variant/40 text-tertiary font-headline-sm text-xs font-semibold flex items-center gap-1.5 self-start sm:self-auto cursor-pointer transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-sm">
+                            {showAddEmailForm ? "close" : "add_link"}
+                          </span>
+                          <span>{showAddEmailForm ? "Cancel" : "Link Institutional Email"}</span>
+                        </button>
+                      </div>
 
-                        <div className="p-3.5 rounded-xl bg-surface-container/50 border border-outline-variant/30 flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-2.5">
-                            <span className="font-bold text-white">GitHub</span>
-                            <span className="text-[11px] text-on-surface-variant font-label-code">
-                              @aryansrivastava07
-                            </span>
-                          </div>
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-label-code text-[10px] font-bold">
-                            Connected
+                      {/* Add Institutional Email Form */}
+                      {showAddEmailForm && (
+                        <div className="p-4 rounded-2xl bg-surface-container/80 border border-primary/40 space-y-3 animate-fadeIn">
+                          <span className="text-xs font-semibold text-white uppercase tracking-wider font-label-code block">
+                            Link New Institutional / Alternate Email
                           </span>
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                            <input
+                              type="email"
+                              value={newOrgEmail}
+                              onChange={(e) => setNewOrgEmail(e.target.value)}
+                              placeholder="e.g. cadet@mit.edu or researcher@company.com"
+                              className="flex-1 px-3.5 py-2 rounded-xl bg-surface-container-low border border-outline-variant/40 text-xs text-on-surface placeholder:text-outline focus:outline-none focus:border-primary"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleLinkNewEmail}
+                              disabled={isLinkingEmail || !newOrgEmail.trim()}
+                              className="px-4 py-2 rounded-xl bg-primary-container hover:bg-primary-container/90 disabled:opacity-40 text-white font-headline-sm text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                            >
+                              {isLinkingEmail ? (
+                                <>
+                                  <span className="material-symbols-outlined text-sm animate-spin">
+                                    progress_activity
+                                  </span>
+                                  <span>Linking...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="material-symbols-outlined text-sm">add</span>
+                                  <span>Link Email</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          {linkEmailError && (
+                            <p className="text-xs text-red-400 font-label-code flex items-center gap-1">
+                              <span className="material-symbols-outlined text-sm">error</span>
+                              <span>{linkEmailError}</span>
+                            </p>
+                          )}
                         </div>
+                      )}
+
+                      {/* Grid of linked emails */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {Array.from(new Set(linkedEmails.length > 0 ? linkedEmails : [email])).map(
+                          (emailItem) => {
+                            const isPrimary = emailItem === (user?.email || email);
+                            const domain = emailItem.split("@")[1] || "quizzcraft.app";
+                            return (
+                              <div
+                                key={emailItem}
+                                className="p-3.5 rounded-xl bg-surface-container/50 border border-outline-variant/30 flex items-center justify-between text-xs gap-2"
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className="w-8 h-8 rounded-lg bg-surface-container-high border border-outline-variant/30 flex items-center justify-center text-primary shrink-0">
+                                    <span className="material-symbols-outlined text-base">
+                                      {isPrimary ? "verified_user" : "corporate_fare"}
+                                    </span>
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-bold text-white block truncate">
+                                        {emailItem}
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] text-on-surface-variant font-label-code">
+                                      Domain: @{domain}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {isPrimary ? (
+                                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-label-code text-[10px] font-bold">
+                                      Primary
+                                    </span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUnlinkEmail(emailItem)}
+                                      disabled={unlinkingEmail === emailItem}
+                                      className="p-1 text-on-surface-variant hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
+                                      title="Unlink this email"
+                                    >
+                                      {unlinkingEmail === emailItem ? (
+                                        <span className="material-symbols-outlined text-sm animate-spin">
+                                          progress_activity
+                                        </span>
+                                      ) : (
+                                        <span className="material-symbols-outlined text-sm">
+                                          delete
+                                        </span>
+                                      )}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          }
+                        )}
                       </div>
                     </div>
 
                     {/* Action Buttons */}
                     <div className="pt-4 border-t border-outline-variant/20 flex flex-col sm:flex-row items-center justify-between gap-3">
-                      <span className="text-xs text-on-surface-variant font-label-code">
-                        Last modified: Today at {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {usernameCheck.status === "available" && (
+                          <span className="text-xs text-emerald-400 font-label-code flex items-center gap-1 font-semibold">
+                            <span className="material-symbols-outlined text-xs">check_circle</span>
+                            Credentials valid &amp; ready
+                          </span>
+                        )}
+                        {usernameCheck.status === "taken" && (
+                          <span className="text-xs text-red-400 font-label-code flex items-center gap-1 font-semibold">
+                            <span className="material-symbols-outlined text-xs">cancel</span>
+                            Username already taken
+                          </span>
+                        )}
+                        {usernameCheck.status === "invalid" && (
+                          <span className="text-xs text-amber-400 font-label-code flex items-center gap-1 font-semibold">
+                            <span className="material-symbols-outlined text-xs">warning</span>
+                            Check username format
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2.5 w-full sm:w-auto">
                         <button
                           type="button"
                           onClick={() => {
-                            setFullName("Aryan Srivastava");
-                            setUsername("aryan");
-                            setEmail("aryasrivastavaq@gmail.com");
+                            setFullName(user?.username || "");
+                            setUsername(user?.username || "");
+                            setEmail(user?.email || "");
+                            setInstitution("");
+                            setBio("");
+                            setMobileNo("");
+                            setAddress("");
+                            setDateOfBirth("");
                           }}
-                          className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-outline-variant/40 hover:bg-surface-container text-on-surface text-xs font-headline-sm transition-colors"
+                          className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-outline-variant/40 hover:bg-surface-container text-on-surface text-xs font-headline-sm transition-colors cursor-pointer"
                         >
-                          Reset Defaults
+                          Clear Edits
                         </button>
                         <button
                           type="submit"
-                          className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white font-headline-sm text-xs font-semibold shadow-sm border border-white/10 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                          disabled={
+                            isSaving ||
+                            usernameCheck.status === "taken" ||
+                            usernameCheck.status === "invalid" ||
+                            usernameCheck.status === "checking"
+                          }
+                          className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-primary-container hover:bg-primary-container/90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-headline-sm text-xs font-semibold shadow-sm border border-white/10 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5"
                         >
-                          <span className="material-symbols-outlined text-base">save</span>
-                          <span>Save Changes</span>
+                          {isSaving ? (
+                            <>
+                              <span className="material-symbols-outlined text-base animate-spin">progress_activity</span>
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="material-symbols-outlined text-base">save</span>
+                              <span>Save Changes</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
@@ -1040,7 +1727,6 @@ function ProfileContent() {
                             <Link
                               href={`/editor?quizId=${quiz.id}`}
                               className="px-3 py-1.5 rounded-xl bg-surface-container hover:bg-surface-bright border border-outline-variant/30 text-on-surface hover:text-white flex items-center gap-1 transition-all"
-                              title="Edit Questions and Choices"
                             >
                               <span className="material-symbols-outlined text-sm text-primary">
                                 edit
@@ -1050,40 +1736,13 @@ function ProfileContent() {
 
                             <Link
                               href={`/deploy?quizId=${quiz.id}`}
-                              className="px-3.5 py-1.5 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white font-semibold flex items-center gap-1 shadow-sm border border-white/10 active:scale-95 transition-all"
-                              title="Deploy to Live Arena or Schedule"
+                              className="px-3 py-1.5 rounded-xl bg-primary-container hover:bg-primary-container/90 border border-white/10 text-white flex items-center gap-1 shadow-sm transition-all"
                             >
                               <span className="material-symbols-outlined text-sm">
                                 rocket_launch
                               </span>
-                              <span>Launch Room</span>
+                              <span>Deploy</span>
                             </Link>
-
-                            <Link
-                              href={`/quiz?quizId=${quiz.id}`}
-                              className="px-3 py-1.5 rounded-xl bg-surface-container hover:bg-surface-bright border border-outline-variant/30 text-on-surface hover:text-white flex items-center gap-1 transition-all"
-                              title="Test Run Quiz"
-                            >
-                              <span className="material-symbols-outlined text-sm text-emerald-400">
-                                play_arrow
-                              </span>
-                              <span>Test</span>
-                            </Link>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                navigator.clipboard.writeText(quiz.id);
-                                setToastMessage(`Quiz ID ${quiz.id} copied to clipboard!`);
-                                setTimeout(() => setToastMessage(null), 2500);
-                              }}
-                              className="p-1.5 rounded-xl bg-surface-container hover:bg-surface-bright text-outline hover:text-on-surface transition-colors cursor-pointer"
-                              title="Copy Quiz ID"
-                            >
-                              <span className="material-symbols-outlined text-base">
-                                content_copy
-                              </span>
-                            </button>
                           </div>
                         </div>
                       ))}
@@ -1093,7 +1752,7 @@ function ProfileContent() {
               </ParallaxReveal>
             )}
 
-            {/* TAB 3: QUIZ ATTEMPTED (HISTORY & REVIEW) */}
+            {/* TAB 3: QUIZ ATTEMPTED */}
             {currentTab === "quiz-attempted" && (
               <ParallaxReveal direction="up" distance={25} duration={700}>
                 <div className="space-y-4">
@@ -1182,16 +1841,16 @@ function ProfileContent() {
                           No Quiz Attempts Recorded
                         </h3>
                         <p className="font-body-md text-xs text-on-surface-variant">
-                          You haven't participated in any arena sessions yet. Join an active room with a game PIN or practice on your quizzes.
+                          You haven&apos;t participated in any arena sessions yet. Join an active room with a game PIN to compete and earn EXP.
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
                         <Link
                           href="/join"
-                          className="px-5 py-2.5 rounded-xl bg-tertiary hover:bg-tertiary/90 text-on-tertiary font-headline-sm text-xs font-semibold flex items-center gap-2 shadow-lg shadow-tertiary/20 active:scale-95 transition-all"
+                          className="px-5 py-2.5 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white font-headline-sm text-xs font-semibold flex items-center gap-2 shadow-lg shadow-primary/20 active:scale-95 transition-all"
                         >
                           <span className="material-symbols-outlined text-base">pin</span>
-                          <span>Join Arena</span>
+                          <span>Join Live Arena</span>
                         </Link>
                         <Link
                           href="/create"
@@ -1249,23 +1908,14 @@ function ProfileContent() {
                             {attempt.quizId && (
                               <Link
                                 href={`/quiz?quizId=${attempt.quizId}`}
-                                className="px-3.5 py-2 rounded-xl bg-surface-container hover:bg-surface-bright border border-outline-variant/40 text-on-surface hover:text-white text-xs font-headline-sm flex items-center gap-1.5 transition-all active:scale-95"
+                                className="px-3.5 py-1.5 rounded-xl bg-surface-container hover:bg-surface-bright border border-outline-variant/40 text-on-surface hover:text-white font-headline-sm text-xs flex items-center gap-1.5 transition-all"
                               >
-                                <span className="material-symbols-outlined text-sm text-emerald-400">
+                                <span className="material-symbols-outlined text-sm text-tertiary">
                                   replay
                                 </span>
-                                <span>Retake</span>
+                                <span>Retry</span>
                               </Link>
                             )}
-                            <Link
-                              href={attempt.quizId ? `/results?quizId=${attempt.quizId}` : "/results"}
-                              className="px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-bright border border-outline-variant/40 hover:border-tertiary text-on-surface hover:text-white text-xs font-headline-sm flex items-center gap-1.5 transition-all active:scale-95"
-                            >
-                              <span className="material-symbols-outlined text-sm text-tertiary">
-                                fact_check
-                              </span>
-                              <span>Review Solutions</span>
-                            </Link>
                           </div>
                         </div>
                       ))}
@@ -1280,92 +1930,91 @@ function ProfileContent() {
               <ParallaxReveal direction="up" distance={25} duration={700}>
                 <div className="space-y-4">
                   {/* FAQs Header & Search */}
-                  <div className="rounded-2xl p-6 bg-surface-container-low/75 border border-outline-variant/30 backdrop-blur-xl shadow-lg space-y-4">
-                    <div>
-                      <h2 className="text-xl sm:text-2xl font-headline-lg font-bold text-white">
-                        Frequently Asked Questions
-                      </h2>
-                      <p className="text-xs text-on-surface-variant mt-0.5">
-                        Clear answers to common questions about quiz creation, live arena competitions, and anti-cheat policies
-                      </p>
+                  <div className="rounded-2xl p-6 bg-surface-container-low/75 border border-outline-variant/30 backdrop-blur-2xl shadow-2xl space-y-4">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div>
+                        <h2 className="text-xl sm:text-2xl font-headline-lg font-bold text-white">
+                          Frequently Asked Questions
+                        </h2>
+                        <p className="text-xs text-on-surface-variant mt-0.5">
+                          Instant answers regarding scoring, Live Arena orchestration, and AI document ingestion
+                        </p>
+                      </div>
+                      <Link
+                        href="/create"
+                        className="px-4 py-2 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white font-headline-sm text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all shrink-0"
+                      >
+                        <span className="material-symbols-outlined text-sm">bolt</span>
+                        <span>Launch Studio</span>
+                      </Link>
                     </div>
 
-                    <div className="relative">
-                      <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline text-base">
-                        search
-                      </span>
-                      <input
-                        type="text"
-                        value={faqSearch}
-                        onChange={(e) => setFaqSearch(e.target.value)}
-                        placeholder="Search answers (e.g. anti-cheat, PDF ingestion, XP calculation)..."
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-surface-container-high/70 border border-outline-variant/30 text-xs text-on-surface placeholder:text-outline focus:outline-none focus:border-primary"
-                      />
-                    </div>
-
-                    {/* Category Filter Pills */}
-                    <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs font-headline-sm">
-                      {[
-                        "All",
-                        "Creating Quizzes",
-                        "Hosting & Arena",
-                        "Scoring & Anti-Cheat",
-                        "Account & Access",
-                      ].map((cat) => (
-                        <button
-                          key={cat}
-                          type="button"
-                          onClick={() => setFaqCategory(cat)}
-                          className={`px-3 py-1 rounded-full border transition-all ${
-                            faqCategory === cat
-                              ? "bg-primary text-on-primary border-primary font-semibold shadow-sm"
-                              : "bg-surface-container/60 border-outline-variant/30 text-on-surface-variant hover:text-white"
-                          }`}
-                        >
-                          {cat}
-                        </button>
-                      ))}
+                    {/* Search & Category Pills */}
+                    <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                      <div className="relative flex-1">
+                        <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline text-sm">
+                          search
+                        </span>
+                        <input
+                          type="text"
+                          value={faqSearch}
+                          onChange={(e) => setFaqSearch(e.target.value)}
+                          placeholder="Search guides, scoring mechanics, anti-cheat..."
+                          className="w-full pl-10 pr-4 py-2 rounded-xl bg-surface-container/60 border border-outline-variant/40 text-on-surface text-xs placeholder:text-outline focus:outline-none focus:border-primary transition-colors"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 font-headline-sm text-xs">
+                        {["All", "Creating Quizzes", "Hosting & Arena", "Scoring & Anti-Cheat"].map((cat) => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setFaqCategory(cat)}
+                            className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors cursor-pointer ${
+                              faqCategory === cat
+                                ? "bg-surface-container-high text-white border border-primary/40"
+                                : "text-on-surface-variant hover:text-white bg-surface-container/40"
+                            }`}
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Accordion List */}
-                  <div className="space-y-3">
-                    {filteredFaqs.map((faq, idx) => {
-                      const isOpen = openFaqIndex === idx;
+                  {/* Accordion Items */}
+                  <div className="space-y-2.5">
+                    {filteredFaqs.map((faq, index) => {
+                      const isOpen = openFaqIndex === index;
                       return (
                         <div
-                          key={idx}
-                          className={`rounded-2xl border transition-all overflow-hidden backdrop-blur-xl ${
-                            isOpen
-                              ? "bg-surface-container-low/90 border-primary/50 shadow-lg shadow-primary/10"
-                              : "bg-surface-container-low/60 border-outline-variant/30 hover:border-outline-variant/60"
-                          }`}
+                          key={index}
+                          className="rounded-2xl border border-outline-variant/30 bg-surface-container-low/75 overflow-hidden transition-all shadow-md"
                         >
                           <button
                             type="button"
-                            onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
-                            className="w-full p-4 sm:p-5 flex items-center justify-between text-left gap-3 cursor-pointer"
+                            onClick={() => setOpenFaqIndex(isOpen ? null : index)}
+                            className="w-full p-4 sm:p-5 text-left flex items-center justify-between gap-4 cursor-pointer hover:bg-white/5 transition-colors"
                           >
                             <div className="flex items-center gap-3">
-                              <span className="w-6 h-6 rounded-lg bg-surface-container-high text-primary flex items-center justify-center font-label-code text-xs font-bold shrink-0">
-                                {idx + 1}
+                              <span className="px-2 py-0.5 rounded bg-surface-container-high text-primary font-label-code text-[10px] font-bold shrink-0">
+                                {faq.category}
                               </span>
-                              <h4 className="text-sm sm:text-base font-headline-sm font-semibold text-white">
+                              <span className="font-headline-sm font-semibold text-xs sm:text-sm text-white">
                                 {faq.q}
-                              </h4>
+                              </span>
                             </div>
                             <span
-                              className={`material-symbols-outlined text-outline text-lg transform transition-transform duration-200 ${
+                              className={`material-symbols-outlined text-outline text-lg transition-transform duration-300 ${
                                 isOpen ? "rotate-180 text-primary" : ""
                               }`}
                             >
                               expand_more
                             </span>
                           </button>
-
                           {isOpen && (
-                            <div className="px-5 pb-5 pt-1 border-t border-outline-variant/20 text-xs sm:text-sm text-on-surface-variant leading-relaxed font-body-md animate-fadeIn">
-                              <p>{faq.a}</p>
+                            <div className="px-4 sm:px-5 pb-5 pt-1 text-xs font-body-md text-on-surface-variant leading-relaxed border-t border-outline-variant/10">
+                              {faq.a}
                             </div>
                           )}
                         </div>
@@ -1380,23 +2029,19 @@ function ProfileContent() {
             {currentTab === "contact-support" && (
               <ParallaxReveal direction="up" distance={25} duration={700}>
                 <div className="rounded-2xl p-6 sm:p-8 bg-surface-container-low/75 border border-outline-variant/30 backdrop-blur-2xl shadow-2xl space-y-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-outline-variant/20">
+                  <div className="flex items-center justify-between pb-4 border-b border-outline-variant/20">
                     <div>
                       <h2 className="text-xl sm:text-2xl font-headline-lg font-bold text-white">
-                        Contact Support &amp; Help Desk
+                        Contact Support &amp; Incident Dispatch
                       </h2>
                       <p className="text-xs text-on-surface-variant mt-0.5">
-                        Need immediate assistance with a live exam or bespoke AI integration? Submit a priority ticket below.
+                        Submit a priority ticket directly to our engineers with immediate database logging and email confirmation
                       </p>
-                    </div>
-                    <div className="flex items-center gap-2 font-label-code text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/30">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                      <span>SLA Response: &lt; 15 Mins</span>
                     </div>
                   </div>
 
                   {ticketSubmittedId ? (
-                    <div className="p-8 rounded-2xl bg-surface-container/70 border border-primary/40 text-center space-y-4">
+                    <div className="p-8 rounded-2xl bg-surface-container/60 border border-primary/40 text-center space-y-3">
                       <div className="w-14 h-14 rounded-2xl bg-primary-container/30 border border-primary/50 text-primary flex items-center justify-center mx-auto text-3xl">
                         <span className="material-symbols-outlined text-3xl">mark_email_read</span>
                       </div>
@@ -1408,8 +2053,8 @@ function ProfileContent() {
                         <strong className="text-primary font-label-code">
                           {ticketSubmittedId}
                         </strong>
-                        . An engineer has been paged and will respond to{" "}
-                        <span className="text-white">{email}</span> within 15 minutes.
+                        . An engineer has been notified and a confirmation email was dispatched to{" "}
+                        <span className="text-white">{email}</span>.
                       </p>
                       <button
                         type="button"
@@ -1418,7 +2063,7 @@ function ProfileContent() {
                           setTicketSubject("");
                           setTicketMessage("");
                         }}
-                        className="px-5 py-2 rounded-xl bg-surface-container-high hover:bg-surface-bright text-xs font-headline-sm text-white transition-colors"
+                        className="px-5 py-2 rounded-xl bg-surface-container-high hover:bg-surface-bright text-xs font-headline-sm text-white transition-colors cursor-pointer"
                       >
                         Submit Another Inquiry
                       </button>
@@ -1470,7 +2115,7 @@ function ProfileContent() {
                           required
                           value={ticketSubject}
                           onChange={(e) => setTicketSubject(e.target.value)}
-                          placeholder="e.g. Question generation stalled on 45MB Quantum Electrodynamics PDF"
+                          placeholder="e.g. Question generation inquiry or arena connection issue"
                           className="w-full px-4 py-2.5 rounded-xl bg-surface-container/60 border border-outline-variant/40 text-on-surface text-xs focus:outline-none focus:border-primary transition-colors"
                         />
                       </div>
@@ -1502,10 +2147,20 @@ function ProfileContent() {
 
                         <button
                           type="submit"
+                          disabled={isSubmittingTicket}
                           className="w-full sm:w-auto px-7 py-2.5 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white font-headline-sm text-xs font-semibold shadow-sm border border-white/10 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5"
                         >
-                          <span className="material-symbols-outlined text-base">send</span>
-                          <span>Dispatch Priority Ticket</span>
+                          {isSubmittingTicket ? (
+                            <>
+                              <span className="material-symbols-outlined text-base animate-spin">progress_activity</span>
+                              <span>Submitting...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="material-symbols-outlined text-base">send</span>
+                              <span>Dispatch Priority Ticket</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     </form>
@@ -1516,9 +2171,9 @@ function ProfileContent() {
                     <div className="p-3 rounded-xl bg-surface-container/40 border border-outline-variant/30 flex items-center gap-2.5">
                       <span className="material-symbols-outlined text-primary text-xl">forum</span>
                       <div>
-                        <span className="block font-semibold text-white">Discord Guild</span>
+                        <span className="block font-semibold text-white">Community Guild</span>
                         <span className="text-[11px] text-on-surface-variant font-label-code">
-                          4,200+ active educators
+                          Active educators &amp; pilots
                         </span>
                       </div>
                     </div>
@@ -1540,7 +2195,7 @@ function ProfileContent() {
                       <div>
                         <span className="block font-semibold text-white">Cluster Telemetry</span>
                         <span className="text-[11px] text-emerald-400 font-label-code">
-                          100% Operational
+                          Operational 100%
                         </span>
                       </div>
                     </div>
@@ -1576,8 +2231,9 @@ function ProfileContent() {
                       </div>
                       <input
                         type="checkbox"
-                        defaultChecked
-                        className="rounded border-outline-variant/60 bg-surface-container text-primary w-4 h-4"
+                        checked={settings.liveArenaInvites}
+                        onChange={(e) => handleToggleSetting("liveArenaInvites", e.target.checked)}
+                        className="rounded border-outline-variant/60 bg-surface-container text-primary w-4 h-4 cursor-pointer"
                       />
                     </div>
 
@@ -1592,8 +2248,9 @@ function ProfileContent() {
                       </div>
                       <input
                         type="checkbox"
-                        defaultChecked
-                        className="rounded border-outline-variant/60 bg-surface-container text-primary w-4 h-4"
+                        checked={settings.leaderboardSurgeAlerts}
+                        onChange={(e) => handleToggleSetting("leaderboardSurgeAlerts", e.target.checked)}
+                        className="rounded border-outline-variant/60 bg-surface-container text-primary w-4 h-4 cursor-pointer"
                       />
                     </div>
 
@@ -1608,8 +2265,9 @@ function ProfileContent() {
                       </div>
                       <input
                         type="checkbox"
-                        defaultChecked
-                        className="rounded border-outline-variant/60 bg-surface-container text-primary w-4 h-4"
+                        checked={settings.weeklyDigest}
+                        onChange={(e) => handleToggleSetting("weeklyDigest", e.target.checked)}
+                        className="rounded border-outline-variant/60 bg-surface-container text-primary w-4 h-4 cursor-pointer"
                       />
                     </div>
                   </div>
@@ -1627,7 +2285,7 @@ function ProfileContent() {
                         Platform Preferences &amp; Accessibility
                       </h2>
                       <p className="text-xs text-on-surface-variant mt-0.5">
-                        Customize visual fidelity, 3D card perspective damping, and audio haptics
+                        Customize visual fidelity, cosmic flight animation, and exam anti-cheat parameters (Stored in DB)
                       </p>
                     </div>
                   </div>
@@ -1636,16 +2294,17 @@ function ProfileContent() {
                     <div className="p-4 rounded-xl bg-surface-container/50 border border-outline-variant/30 flex items-center justify-between">
                       <div>
                         <span className="block font-semibold text-white text-sm">
-                          Cosmic Starfield &amp; Parallax Intensity
+                          Cosmic Starfield &amp; Parallax Motion
                         </span>
                         <span className="text-on-surface-variant">
-                          Enable multi-layer GPU cosmic particle drift on cursor and scroll motion
+                          Toggle deep-space starfield motion and dynamic parallax flight
                         </span>
                       </div>
                       <input
                         type="checkbox"
-                        defaultChecked
-                        className="rounded border-outline-variant/60 bg-surface-container text-primary w-4 h-4"
+                        checked={settings.starfieldMotion}
+                        onChange={(e) => handleToggleSetting("starfieldMotion", e.target.checked)}
+                        className="rounded border-outline-variant/60 bg-surface-container text-primary w-4 h-4 cursor-pointer"
                       />
                     </div>
 
@@ -1655,12 +2314,14 @@ function ProfileContent() {
                           High Contrast Accessibility
                         </span>
                         <span className="text-on-surface-variant">
-                          Boost typography border outlines and darken card backgrounds for enhanced readability
+                          Enhance outlines, darken cards, and maximize readability
                         </span>
                       </div>
                       <input
                         type="checkbox"
-                        className="rounded border-outline-variant/60 bg-surface-container text-primary w-4 h-4"
+                        checked={settings.highContrast}
+                        onChange={(e) => handleToggleSetting("highContrast", e.target.checked)}
+                        className="rounded border-outline-variant/60 bg-surface-container text-primary w-4 h-4 cursor-pointer"
                       />
                     </div>
 
@@ -1675,8 +2336,9 @@ function ProfileContent() {
                       </div>
                       <input
                         type="checkbox"
-                        defaultChecked
-                        className="rounded border-outline-variant/60 bg-surface-container text-primary w-4 h-4"
+                        checked={settings.kioskAutoLock}
+                        onChange={(e) => handleToggleSetting("kioskAutoLock", e.target.checked)}
+                        className="rounded border-outline-variant/60 bg-surface-container text-primary w-4 h-4 cursor-pointer"
                       />
                     </div>
                   </div>
@@ -1687,23 +2349,8 @@ function ProfileContent() {
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="w-full bg-surface-container-lowest/80 backdrop-blur-md border-t border-outline-variant/20 py-5 px-6 relative z-10 text-xs font-label-code text-on-surface-variant">
-        <div className="max-w-max-width-canvas mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
-          <span>QuizzCraft.app • Spatial Learning Engine Profile Portal</span>
-          <div className="flex items-center gap-4">
-            <Link href="/" className="hover:text-primary transition-colors">
-              Home
-            </Link>
-            <Link href="/create" className="hover:text-primary transition-colors">
-              Create Quiz
-            </Link>
-            <Link href="/join" className="hover:text-primary transition-colors">
-              Join Arena
-            </Link>
-          </div>
-        </div>
-      </footer>
+      {/* Reusable Platform Footer */}
+      <AuthFooter />
     </div>
   );
 }

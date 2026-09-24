@@ -1,22 +1,24 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import CosmicVoidCanvas from "@/components/canvas/CosmicVoidCanvas";
 import ParallaxReveal from "@/components/ui/ParallaxReveal";
+import AuthFooter from "@/components/layout/AuthFooter";
 import { useAuth } from "@/lib/auth/auth-context";
 import { formatApiError } from "@/lib/api/client";
 
-export default function AuthPage() {
+function AuthContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectUrl = searchParams.get("redirect") || "/profile";
   const { login, register } = useAuth();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -45,12 +47,13 @@ export default function AuthPage() {
     try {
       if (mode === "signin") {
         await login({ email, password });
-        router.push("/profile");
+        router.push(redirectUrl);
       } else {
-        const username =
-          fullName.trim().toLowerCase().replace(/\s+/g, "_") ||
-          email.split("@")[0] ||
+        const rawUsername =
+          fullName.trim().toLowerCase().replace(/[^a-z0-9]/g, "") ||
+          email.split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, "") ||
           "user";
+        const username = rawUsername.padEnd(3, "0").slice(0, 30);
         const result = await register({ username, email, password });
         setSuccessMessage(
           result.message || "Account created! Check your email for OTP."
@@ -69,7 +72,7 @@ export default function AuthPage() {
       <CosmicVoidCanvas />
 
       {/* Stitch Focused Minimal Header (NO standard navbar on auth page) */}
-      <header className="relative z-20 w-full max-w-[1280px] mx-auto px-4 sm:px-8 pt-6 flex justify-between items-center">
+      <header className="relative z-20 w-full max-w-[1280px] mx-auto px-4 sm:px-8 pt-6 flex items-center">
         {/* Brand Identity Logo */}
         <Link href="/" className="flex items-center gap-3 group">
           <div className="w-10 h-10 rounded-xl bg-surface-container-high border border-outline-variant/40 flex items-center justify-center relative overflow-hidden shadow-lg shadow-primary-container/10 group-hover:border-primary transition-colors duration-300">
@@ -81,15 +84,6 @@ export default function AuthPage() {
           <span className="font-headline-sm text-base text-primary font-extrabold tracking-tight">
             QuizzCraft<span className="text-tertiary">.app</span>
           </span>
-        </Link>
-
-        {/* Top Right Minimal Return Action */}
-        <Link
-          href="/"
-          className="flex items-center gap-1.5 text-on-surface-variant hover:text-primary transition-colors duration-200 py-1.5 px-4 rounded-full bg-surface-container-low/60 backdrop-blur-md border border-outline-variant/30 text-xs font-medium"
-        >
-          <span>Explore Quizzes</span>
-          <span className="material-symbols-outlined text-sm">arrow_forward</span>
         </Link>
       </header>
 
@@ -124,10 +118,10 @@ export default function AuthPage() {
             </div>
 
             {/* Right Column: Stitch Authentication Form */}
-            <div className="lg:col-span-7 p-6 sm:p-10 flex flex-col justify-between">
+            <div className="lg:col-span-7 p-6 sm:p-10 flex flex-col justify-center">
               <div>
-                {/* Pill Segmented Switcher & Live Orbit Status */}
-                <div className="flex items-center justify-between mb-6">
+                {/* Pill Segmented Switcher */}
+                <div className="flex items-center mb-6">
                   <div className="inline-flex p-1 rounded-full bg-surface-container-lowest/90 border border-outline-variant/30">
                     <button
                       type="button"
@@ -151,11 +145,6 @@ export default function AuthPage() {
                     >
                       Create Account
                     </button>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 text-xs font-label-code text-tertiary">
-                    <span className="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse" />
-                    <span>Node Orbit: Active</span>
                   </div>
                 </div>
 
@@ -257,14 +246,9 @@ export default function AuthPage() {
                   )}
 
                   <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-medium text-on-surface-variant">
-                        Work or Student Email
-                      </label>
-                      <span className="text-[10px] font-label-code text-tertiary">
-                        SSO Enabled
-                      </span>
-                    </div>
+                    <label className="block text-xs font-medium text-on-surface-variant">
+                      Work or Student Email
+                    </label>
                     <div className="relative">
                       <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-lg">
                         mail
@@ -318,18 +302,6 @@ export default function AuthPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-1">
-                    <label className="flex items-center gap-2 cursor-pointer text-xs text-on-surface-variant">
-                      <input
-                        type="checkbox"
-                        checked={rememberMe}
-                        onChange={(e) => setRememberMe(e.target.checked)}
-                        className="rounded border-outline-variant/60 bg-surface-container-lowest text-primary focus:ring-0"
-                      />
-                      <span>Remember credentials for 30 days</span>
-                    </label>
-                  </div>
-
                   {/* Mature Solid Single-Color CTA */}
                   <button
                     type="submit"
@@ -362,43 +334,14 @@ export default function AuthPage() {
                   </button>
                 </form>
               </div>
-
-              {/* Cryptographic Security Footer */}
-              <div className="pt-6 mt-6 border-t border-outline-variant/20 flex flex-col sm:flex-row items-center justify-between gap-2 text-on-surface-variant text-[11px] font-label-code">
-                <div className="flex items-center gap-1.5 text-tertiary">
-                  <span className="material-symbols-outlined text-sm">
-                    shield
-                  </span>
-                  <span>Zero data leakage for proprietary courseware</span>
-                </div>
-                <div className="flex items-center gap-1 text-outline">
-                  <span className="material-symbols-outlined text-sm">
-                    lock
-                  </span>
-                  <span>256-bit AES encrypted</span>
-                </div>
-              </div>
             </div>
           </div>
         </div>
       </ParallaxReveal>
     </main>
 
-      {/* Stitch Focused Auth Footer */}
-      <footer className="relative z-20 w-full max-w-[1280px] mx-auto px-4 sm:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-on-surface-variant font-body-sm text-xs border-t border-outline-variant/20">
-        <p>© 2026 QuizzCraft.app • Spatial Learning Engine</p>
-        <div className="flex items-center gap-6 font-label-code text-xs">
-          <Link href="/privacy" className="hover:text-primary transition-colors">
-            Privacy Policy
-          </Link>
-          <Link href="/terms" className="hover:text-primary transition-colors">
-            Terms of Service
-          </Link>
-          <Link href="/status" className="hover:text-primary transition-colors">
-            System Status
-          </Link>
-        </div>
-      </footer>
+      {/* Reusable Auth Footer */}
+      <AuthFooter />
 
       {/* Floating Error Toast Notification */}
       {authError && (
@@ -462,5 +405,21 @@ export default function AuthPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-surface text-on-surface">
+          <span className="material-symbols-outlined text-4xl text-primary animate-spin">
+            progress_activity
+          </span>
+        </div>
+      }
+    >
+      <AuthContent />
+    </Suspense>
   );
 }

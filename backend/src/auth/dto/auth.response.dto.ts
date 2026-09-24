@@ -8,13 +8,18 @@ export class RegisterAuthResponseDto {
 export class LoginAuthResponseDto {
       username!: string;
       email!: string;
+      emails?: string[];
       verified!: boolean;
       profilePicture!: string;
+      xp?: number;
 }
 
 export class MeAuthResponseDto {
       username!: string;
       email!: string;
+      emails?: string[];
       verified!: boolean;
       profilePicture!: string;
+      xp?: number;
 }
+

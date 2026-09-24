@@ -291,13 +291,7 @@ export default function HeroQuizCard3D() {
               : "rotate-2 translate-x-2 -translate-y-1.5 scale-[0.98] opacity-50"
           }`}
         >
-          <div className="flex items-center justify-between border-b border-outline-variant/30 pb-3 mb-4 opacity-70">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-tertiary" />
-              <span className="text-label-code text-xs text-tertiary font-semibold tracking-wider">
-                LIVE 3D CARD
-              </span>
-            </div>
+          <div className="flex items-center justify-end border-b border-outline-variant/30 pb-3 mb-4 opacity-70">
             <div className="text-label-code text-xs text-primary">{nextQ.timer}</div>
           </div>
           <p className="text-xs text-on-surface-variant font-label-code uppercase tracking-wider mb-2">
@@ -317,13 +311,7 @@ export default function HeroQuizCard3D() {
           }`}
         >
           {/* Card Header */}
-          <div className="flex items-center justify-between border-b border-outline-variant/30 pb-3 mb-4">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-tertiary animate-pulse" />
-              <span className="text-label-code text-xs text-tertiary font-semibold tracking-wider">
-                LIVE 3D CARD
-              </span>
-            </div>
+          <div className="flex items-center justify-end border-b border-outline-variant/30 pb-3 mb-4">
             <div className="flex items-center gap-1.5 bg-surface-container px-2.5 py-1 rounded-md text-label-code text-xs text-primary border border-primary/20">
               <span className="material-symbols-outlined text-sm">timer</span>
               <span>{currentQ.timer}</span>
@@ -397,11 +385,7 @@ export default function HeroQuizCard3D() {
           </div>
 
           {/* Footer Telemetry */}
-          <div className="flex items-center justify-between pt-3 border-t border-outline-variant/30 text-label-code text-xs select-none">
-            <div className="flex items-center gap-1.5 text-amber-accent font-semibold">
-              <span className="material-symbols-outlined text-base">local_fire_department</span>
-              <span>{currentQ.multiplier}</span>
-            </div>
+          <div className="flex items-center justify-end pt-3 border-t border-outline-variant/30 text-label-code text-xs select-none">
             <div className="flex items-center gap-2">
               <span className="text-on-surface-variant">Reward:</span>
               <span

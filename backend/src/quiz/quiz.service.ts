@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -12,6 +13,7 @@ import { User } from '../schemas/user.schema';
 import {
   answerQuizDto,
   attemptQuizDto,
+  deployQuizDto,
   generateQuizDto,
 } from './dto/quiz.request.dto';
 import { ServiceResponse } from '../common/interfaces/service-response.interface';
@@ -31,6 +33,24 @@ export class QuizService {
     @Inject(AI_PROVIDER) private ai: AiProvider,
   ) {}
 
+  async generateUniquePin(): Promise<string> {
+    let pin = '';
+    let exists = true;
+    let attempts = 0;
+    while (exists && attempts < 25) {
+      pin = Math.floor(100000 + Math.random() * 900000).toString();
+      const found = await this.QuizModel.findOne({ pin }).lean();
+      if (!found) {
+        exists = false;
+      }
+      attempts++;
+    }
+    if (exists) {
+      pin = String(Date.now()).slice(-6);
+    }
+    return pin;
+  }
+
   async generateQuiz(
     dto: generateQuizDto,
   ): Promise<ServiceResponse<generateQuizResponseData>> {
@@ -40,8 +60,9 @@ export class QuizService {
         await this.ai.generateQuiz(dto); // Use new AI response interface
       try {
         const questions = generatedQuiz.quiz.questions.map((question, idx) => {
-          const level = (question as any).level || (idx % 3 === 0 ? 'EASY' : idx % 3 === 1 ? 'MEDIUM' : 'HARD');
-          const xp = level === 'EASY' ? 100 : level === 'HARD' ? 300 : 200;
+          const rawLevel = String((question as any).level || (idx % 3 === 0 ? 'EASY' : idx % 3 === 1 ? 'MEDIUM' : 'HARD')).toUpperCase();
+          const level = rawLevel === 'EASY' ? 'EASY' : rawLevel === 'HARD' ? 'HARD' : 'MEDIUM';
+          const xp = Number((question as any).xp) || (level === 'EASY' ? 100 : level === 'HARD' ? 300 : 200);
           return {
             ...question,
             questionId: randomUUID(),
@@ -51,8 +72,11 @@ export class QuizService {
           };
         });
 
+        const pin = await this.generateUniquePin();
+
         const newQuiz: IQuiz = {
           quizId: randomUUID(),
+          pin,
           title: generatedQuiz.quiz.title,
           immediateResult: true,
           questime: 60,
@@ -76,13 +100,132 @@ export class QuizService {
     }
   }
 
+  async getQuizByPin(
+    pin: string,
+    userEmail?: string,
+  ): Promise<ServiceResponse<any>> {
+    const cleanPin = pin.replace(/\D/g, '');
+    const quiz = await this.QuizModel.findOne({
+      $or: [{ pin: cleanPin }, { pin }],
+    });
+
+    if (!quiz) {
+      throw new NotFoundException(`No active quiz found matching PIN: ${pin}`);
+    }
+
+    const now = new Date();
+
+    // 1. Check Organization Access Control
+    if (quiz.accessMode === 'ORGANIZATION') {
+      const requiredDomain = (quiz.organizationDomain || '').toLowerCase().trim();
+      const normalizedUserEmail = (userEmail || '').toLowerCase().trim();
+
+      if (!normalizedUserEmail) {
+        return {
+          message: 'Organization domain restricted',
+          data: {
+            isRestricted: true,
+            organizationDomain: requiredDomain,
+            message: `This quiz is restricted to members of @${requiredDomain}. Please log in with your organization email to join.`,
+          },
+        };
+      }
+
+      // Check if user has an email matching required organization domain
+      const user = await this.UserModel.findOne({
+        $or: [{ email: normalizedUserEmail }, { emails: normalizedUserEmail }],
+      }).lean();
+
+      const allUserEmails = user
+        ? Array.isArray(user.emails) && user.emails.length > 0
+          ? user.emails
+          : [user.email]
+        : [normalizedUserEmail];
+
+      const hasMatchingDomain = allUserEmails.some(
+        (e) => e.split('@')[1]?.toLowerCase().trim() === requiredDomain,
+      );
+
+      if (!hasMatchingDomain) {
+        return {
+          message: 'Organization domain unauthorized',
+          data: {
+            isRestricted: true,
+            organizationDomain: requiredDomain,
+            userEmail: normalizedUserEmail,
+            message: `Access denied. This quiz is restricted to verified accounts from @${requiredDomain}. Your active email (${normalizedUserEmail}) is not authorized.`,
+          },
+        };
+      }
+    }
+
+    // 2. Check if Scheduled (not yet live)
+    if (quiz.status === 'SCHEDULED' && quiz.scheduledFor && now < new Date(quiz.scheduledFor)) {
+      return {
+        message: 'Quiz is scheduled',
+        data: {
+          isScheduled: true,
+          quizId: quiz.quizId,
+          title: quiz.title,
+          pin: quiz.pin,
+          scheduledFor: quiz.scheduledFor,
+          waitingCadetsCount: quiz.waitingList?.length || 0,
+          questionCount: quiz.questions?.length || 0,
+          totalXp: (quiz.questions || []).reduce((sum, q) => sum + (q.xp || 200), 0),
+          isWaiting: Boolean(userEmail && quiz.waitingList?.includes(userEmail.toLowerCase().trim())),
+        },
+      };
+    }
+
+    // 3. Check if Ended or Live window expired
+    if (quiz.status === 'ENDED' || (quiz.liveUntil && now > new Date(quiz.liveUntil))) {
+      return {
+        message: 'Quiz arena session concluded',
+        data: {
+          isEnded: true,
+          quizId: quiz.quizId,
+          title: quiz.title,
+          message: 'This quiz arena session has concluded and is no longer accepting answers.',
+        },
+      };
+    }
+
+    const attempts = await this.AttemptsModel.find({ quizId: quiz.quizId }).lean();
+    const peopleAttempted = attempts.length;
+    let totalPct = 0;
+    let counted = 0;
+    const totalQuestions = quiz.questions?.length || 1;
+    for (const a of attempts) {
+      if (typeof a.score === 'number') {
+        const pct = Math.round((a.score / totalQuestions) * 100);
+        totalPct += pct;
+        counted++;
+      }
+    }
+    const averageScore = counted > 0 ? Math.round(totalPct / counted) : 0;
+
+    return {
+      message: 'Quiz fetched successfully',
+      data: {
+        quiz: quiz.toObject() as Quiz & IQuiz,
+        stats: {
+          peopleAttempted,
+          averageScore,
+        },
+      },
+    };
+  }
+
   async getQuiz(quizId: string): Promise<ServiceResponse<{ quiz: Quiz & IQuiz; stats?: { peopleAttempted: number; averageScore: number } }>> {
-    const quiz = await this.QuizModel.findOne({ quizId });
+    let quiz = await this.QuizModel.findOne({ quizId });
+    if (!quiz && quizId.length === 6 && /^\d+$/.test(quizId)) {
+      quiz = await this.QuizModel.findOne({ pin: quizId });
+    }
     if (!quiz) {
       throw new NotFoundException('No Quiz found for this Id');
     }
 
-    const attempts = await this.AttemptsModel.find({ quizId }).lean();
+    const attempts = await this.AttemptsModel.find({ quizId: quiz.quizId }).lean();
     const peopleAttempted = attempts.length;
     let totalPct = 0;
     let counted = 0;
@@ -442,6 +585,244 @@ export class QuizService {
     return {
       message: 'Score fetched',
       data: score,
+    };
+  }
+
+  async deployQuiz(
+    quizId: string,
+    userId: string,
+    dto: deployQuizDto,
+  ): Promise<ServiceResponse<any>> {
+    const quiz = await this.QuizModel.findOne({ quizId });
+    if (!quiz) throw new NotFoundException('Quiz not found');
+
+    const user = await this.UserModel.findById(userId);
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const accessMode = dto.accessMode || 'PUBLIC';
+    let organizationDomain = dto.organizationDomain ? dto.organizationDomain.toLowerCase().trim() : null;
+
+    if (accessMode === 'ORGANIZATION') {
+      const allUserEmails = Array.isArray(user.emails) && user.emails.length > 0 ? user.emails : [user.email];
+      const publicDomains = [
+        'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com',
+        'protonmail.com', 'aol.com', 'zoho.com', 'mail.com', 'yandex.com', 'gmx.com'
+      ];
+      const orgEmails = allUserEmails.filter((e) => {
+        const dom = e.split('@')[1]?.toLowerCase().trim();
+        return dom && !publicDomains.includes(dom);
+      });
+
+      if (orgEmails.length === 0) {
+        throw new BadRequestException(
+          'To create an organization-accessible quiz, you must have a verified organization email linked to your account (e.g. university or company domain).',
+        );
+      }
+
+      if (!organizationDomain) {
+        organizationDomain = orgEmails[0].split('@')[1].toLowerCase().trim();
+      } else {
+        const matchesUserEmail = orgEmails.some(
+          (e) => e.split('@')[1]?.toLowerCase().trim() === organizationDomain,
+        );
+        if (!matchesUserEmail) {
+          throw new BadRequestException(
+            `You do not have a linked email matching domain @${organizationDomain}. Please link an email from this organization first.`,
+          );
+        }
+      }
+    }
+
+    const deploymentType = dto.deploymentType || 'LIVE';
+    const now = new Date();
+    let status: 'LIVE' | 'SCHEDULED' | 'ANYTIME' = 'LIVE';
+    let scheduledFor: Date | null = null;
+    let liveUntil: Date | null = null;
+    const durationMinutes = Math.max(15, Math.min(1440, Number(dto.liveDurationMinutes) || 60));
+
+    if (deploymentType === 'LIVE') {
+      status = 'LIVE';
+      liveUntil = new Date(now.getTime() + durationMinutes * 60 * 1000);
+    } else if (deploymentType === 'SCHEDULED') {
+      status = 'SCHEDULED';
+      if (!dto.scheduledFor) {
+        throw new BadRequestException('A scheduled date and time is required for scheduled deployment');
+      }
+      scheduledFor = new Date(dto.scheduledFor);
+      if (isNaN(scheduledFor.getTime())) {
+        throw new BadRequestException('Invalid scheduled date format');
+      }
+      liveUntil = new Date(scheduledFor.getTime() + durationMinutes * 60 * 1000);
+    } else if (deploymentType === 'ANYTIME') {
+      status = 'ANYTIME';
+      liveUntil = null;
+    }
+
+    const updated = await this.QuizModel.findOneAndUpdate(
+      { quizId },
+      {
+        $set: {
+          ownerId: userId,
+          ownerEmail: user.email,
+          deploymentType,
+          accessMode,
+          organizationDomain,
+          status,
+          scheduledFor,
+          liveDurationMinutes: durationMinutes,
+          liveUntil,
+          scheduledAlertSent: false,
+          antiCheat: dto.antiCheat ?? true,
+          fullScreenLock: dto.fullScreenLock ?? true,
+          shuffleChoices: dto.shuffleChoices ?? true,
+          allowRetries: dto.allowRetries ?? false,
+          isPractice: dto.isPractice ?? false,
+        },
+      },
+      { new: true },
+    );
+
+    return {
+      message: `Quiz deployed successfully with protocol: ${deploymentType}`,
+      data: {
+        quiz: updated,
+        deploymentType,
+        status,
+        accessMode,
+        adminUrl: `/quiz/admin?quizId=${encodeURIComponent(quizId)}`,
+        joinUrl: `/join`,
+        pin: quiz.pin,
+      },
+    };
+  }
+
+  async getQuizAdminData(
+    quizId: string,
+    userId: string,
+  ): Promise<ServiceResponse<any>> {
+    let quiz = await this.QuizModel.findOne({ quizId });
+    if (!quiz && quizId.length === 6 && /^\d+$/.test(quizId)) {
+      quiz = await this.QuizModel.findOne({ pin: quizId });
+    }
+    if (!quiz) throw new NotFoundException('Quiz not found');
+
+    const isOwner = Boolean(quiz.ownerId && String(quiz.ownerId) === String(userId));
+
+    // Fetch all attempts for this quiz
+    const attempts = await this.AttemptsModel.find({ quizId: quiz.quizId }).lean();
+    const totalAttendees = attempts.length;
+    const activeAttendees = attempts.filter((a) => a.isActive).length;
+
+    // Leaderboard calculation
+    const userIds = attempts.map((a) => a.userId).filter(Boolean);
+    const users = await this.UserModel.find({ _id: { $in: userIds } })
+      .select('username fullName profilePicture email xp')
+      .lean();
+    const userMap = new Map(users.map((u) => [String(u._id), u]));
+
+    const totalQuestions = quiz.questions?.length || 1;
+    let totalScoreSum = 0;
+    let completedCount = 0;
+
+    const leaderboard = attempts
+      .map((attempt) => {
+        const cadet = userMap.get(String(attempt.userId));
+        const score = typeof attempt.score === 'number' ? attempt.score : 0;
+        const percentage = Math.round((score / totalQuestions) * 100);
+
+        if (!attempt.isActive) {
+          totalScoreSum += percentage;
+          completedCount++;
+        }
+
+        return {
+          sessionId: attempt.sessionId,
+          userId: attempt.userId,
+          username: cadet?.username || 'Cadet Pilot',
+          fullName: cadet?.fullName || cadet?.username || 'Anonymous Cadet',
+          avatar: cadet?.profilePicture || '',
+          score,
+          totalQuestions,
+          percentage,
+          isActive: attempt.isActive,
+          lastUpdateAt: attempt.lastUpdateAt,
+        };
+      })
+      .sort((a, b) => b.score - a.score || b.percentage - a.percentage);
+
+    const averageScore = completedCount > 0 ? Math.round(totalScoreSum / completedCount) : 0;
+
+    return {
+      message: 'Admin telemetry loaded successfully',
+      data: {
+        quiz: quiz.toObject(),
+        attendeesCount: totalAttendees,
+        activeAttendeesCount: activeAttendees,
+        averageScore,
+        waitingCadetsCount: quiz.waitingList?.length || 0,
+        waitingList: quiz.waitingList || [],
+        leaderboard,
+        isOwner,
+      },
+    };
+  }
+
+  async joinWaitlist(
+    quizId: string,
+    userEmail: string,
+  ): Promise<ServiceResponse<any>> {
+    const quiz = await this.QuizModel.findOne({
+      $or: [{ quizId }, { pin: quizId }],
+    });
+    if (!quiz) throw new NotFoundException('Quiz not found');
+
+    const cleanEmail = (userEmail || '').toLowerCase().trim();
+    if (!cleanEmail) {
+      throw new BadRequestException('A valid email is required to join waitlist');
+    }
+
+    const currentList = quiz.waitingList || [];
+    if (!currentList.includes(cleanEmail)) {
+      currentList.push(cleanEmail);
+      await this.QuizModel.updateOne(
+        { quizId: quiz.quizId },
+        { $set: { waitingList: currentList } },
+      );
+    }
+
+    return {
+      message: 'Joined waitlist successfully',
+      data: {
+        quizId: quiz.quizId,
+        waitingCadetsCount: currentList.length,
+        joined: true,
+      },
+    };
+  }
+
+  async closeQuiz(
+    quizId: string,
+    userId: string,
+  ): Promise<ServiceResponse<any>> {
+    const quiz = await this.QuizModel.findOne({ quizId });
+    if (!quiz) throw new NotFoundException('Quiz not found');
+
+    if (quiz.ownerId && String(quiz.ownerId) !== String(userId)) {
+      throw new UnauthorizedException('Only the quiz owner can conclude the session');
+    }
+
+    await this.QuizModel.updateOne(
+      { quizId },
+      { $set: { status: 'ENDED', liveUntil: new Date() } },
+    );
+
+    return {
+      message: 'Quiz session concluded',
+      data: {
+        quizId,
+        status: 'ENDED',
+        closed: true,
+      },
     };
   }
 }

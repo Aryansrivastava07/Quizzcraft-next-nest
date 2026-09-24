@@ -2,6 +2,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Resend } from 'resend';
 import { verificationMail } from './mails/verification.mail';
 import { passwordResetMail } from './mails/passwordResetMail.mail';
+import { supportTicketMail, SupportTicketMailData } from './mails/supportTicket.mail';
+import { scheduledQuizAlertMail, ScheduledQuizAlertMailData } from './mails/scheduledQuizAlert.mail';
 
 @Injectable()
 export class MailService {
@@ -22,6 +24,7 @@ export class MailService {
       html: verificationMailConfig.template({ OTP: OTP }),
     });
   }
+
   async sendPasswordResetEmail(
     email: string,
     OTP: string,
@@ -32,6 +35,26 @@ export class MailService {
       to: email,
       subject: passwordResetMailConfig.subject,
       html: passwordResetMailConfig.template({ OTP: OTP }),
+    });
+  }
+
+  async sendSupportTicketEmail(data: SupportTicketMailData) {
+    const config = supportTicketMail;
+    return this.resend.emails.send({
+      from: config.from,
+      to: data.email,
+      subject: `Support Ticket Received: [${data.ticketId}] - ${data.subject}`,
+      html: config.template(data),
+    });
+  }
+
+  async sendScheduledQuizAlertEmail(data: ScheduledQuizAlertMailData) {
+    const config = scheduledQuizAlertMail;
+    return this.resend.emails.send({
+      from: config.from,
+      to: data.ownerEmail,
+      subject: `T-Minus 5 Minutes: "${data.quizTitle}" Launches Soon [PIN: ${data.pin}]`,
+      html: config.template(data),
     });
   }
 }

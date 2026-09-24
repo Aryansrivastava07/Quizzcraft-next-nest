@@ -118,11 +118,17 @@ export default function Navbar({ activeChapter }: NavbarProps) {
                 className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-full ring-2 ring-primary/40 hover:ring-primary overflow-visible transition-all cursor-pointer focus:outline-none focus:ring-primary flex items-center justify-center bg-surface-container-high"
                 aria-label="User Profile Menu"
               >
-                <img
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuDasytanrbPihuNOGRp9pWMUk_BlFIHcPv90sw-p1_rSOAFpw9HvuNXCOWuRwYsGIbQcycEHE91t3zCLi8BdMj3pHud7lkaWrZmpDBZ2O4GTi4_T28BGkD-wjrkjKIdAaOxRxZNTTKKUoknFrp4iGRC3sApEhvKU54eGne0XdHQ6ScX7wtPZhuShxuS4-MLn7S7HEPG7TrqeD_cJxaj_-DwfM1DbpYfbR8DjeLxhaXTpxNlxFsOVrTm"
-                  alt="Alex Rivera"
-                  className="w-full h-full rounded-full object-cover"
-                />
+                {user?.profilePicture ? (
+                  <img
+                    src={user.profilePicture}
+                    alt={user?.username || "Pilot"}
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="text-[11px] font-bold text-white font-headline-sm">
+                    {(user?.username || user?.email || "P").slice(0, 2).toUpperCase()}
+                  </span>
+                )}
                 {/* Online Status Beacon */}
                 <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-surface-container-lowest shadow-sm" />
               </button>
@@ -132,12 +138,18 @@ export default function Navbar({ activeChapter }: NavbarProps) {
                 <div className="absolute right-0 mt-3 w-64 rounded-2xl glass-kage border border-white/10 p-3 shadow-2xl backdrop-blur-2xl animate-fadeIn z-50 text-xs">
                   {/* User Header */}
                   <div className="flex items-center gap-3 p-2 pb-3 border-b border-white/10">
-                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-primary/40 shrink-0">
-                      <img
-                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuDasytanrbPihuNOGRp9pWMUk_BlFIHcPv90sw-p1_rSOAFpw9HvuNXCOWuRwYsGIbQcycEHE91t3zCLi8BdMj3pHud7lkaWrZmpDBZ2O4GTi4_T28BGkD-wjrkjKIdAaOxRxZNTTKKUoknFrp4iGRC3sApEhvKU54eGne0XdHQ6ScX7wtPZhuShxuS4-MLn7S7HEPG7TrqeD_cJxaj_-DwfM1DbpYfbR8DjeLxhaXTpxNlxFsOVrTm"
-                        alt="Alex Rivera"
-                        className="w-full h-full object-cover"
-                      />
+                    <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-primary/40 shrink-0 flex items-center justify-center bg-primary-container/30">
+                      {user?.profilePicture ? (
+                        <img
+                          src={user.profilePicture}
+                          alt={user?.username || "Pilot"}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-xs font-bold text-white font-headline-sm">
+                          {(user?.username || user?.email || "P").slice(0, 2).toUpperCase()}
+                        </span>
+                      )}
                     </div>
                     <div className="overflow-hidden">
                       <p className="font-semibold text-white truncate text-sm">
@@ -147,7 +159,7 @@ export default function Navbar({ activeChapter }: NavbarProps) {
                         {user?.email || "user@quizzcraft.app"}
                       </p>
                       <span className="inline-block mt-0.5 px-1.5 py-0.2 rounded bg-primary/10 text-primary text-[10px] font-label-code border border-primary/20">
-                        {user?.verified ? "Verified Educator" : "Cadet"}
+                        {user?.verified ? "Verified Member" : "Active Member"}
                       </span>
                     </div>
                   </div>

@@ -3,13 +3,64 @@ import { HydratedDocument } from 'mongoose';
 
 export type QuizDocument = HydratedDocument<Quiz>;
 
-@Schema()
+@Schema({ timestamps: true })
 export class Quiz {
-  @Prop({ required: true })
+  @Prop({ required: true, index: true })
   quizId!: string;
+
+  @Prop({ unique: true, sparse: true, index: true })
+  pin?: string;
 
   @Prop({ required: true })
   title!: string;
+
+  @Prop({ type: String, default: null })
+  ownerId?: string;
+
+  @Prop({ type: String, default: null })
+  ownerEmail?: string;
+
+  @Prop({ type: String, enum: ['PUBLIC', 'PRIVATE', 'ORGANIZATION'], default: 'PUBLIC' })
+  accessMode?: 'PUBLIC' | 'PRIVATE' | 'ORGANIZATION';
+
+  @Prop({ type: String, default: null })
+  organizationDomain?: string;
+
+  @Prop({ type: String, enum: ['LIVE', 'SCHEDULED', 'ANYTIME'], default: 'LIVE' })
+  deploymentType?: 'LIVE' | 'SCHEDULED' | 'ANYTIME';
+
+  @Prop({ type: String, enum: ['DRAFT', 'SCHEDULED', 'LIVE', 'ANYTIME', 'ENDED'], default: 'DRAFT' })
+  status?: 'DRAFT' | 'SCHEDULED' | 'LIVE' | 'ANYTIME' | 'ENDED';
+
+  @Prop({ type: Date, default: null })
+  scheduledFor?: Date;
+
+  @Prop({ type: Number, default: 60 })
+  liveDurationMinutes?: number;
+
+  @Prop({ type: Date, default: null })
+  liveUntil?: Date;
+
+  @Prop({ type: Boolean, default: false })
+  scheduledAlertSent?: boolean;
+
+  @Prop({ type: [String], default: [] })
+  waitingList?: string[];
+
+  @Prop({ type: Boolean, default: false })
+  isPractice?: boolean;
+
+  @Prop({ type: Boolean, default: true })
+  antiCheat?: boolean;
+
+  @Prop({ type: Boolean, default: true })
+  fullScreenLock?: boolean;
+
+  @Prop({ type: Boolean, default: true })
+  shuffleChoices?: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  allowRetries?: boolean;
 
   @Prop({ type: Boolean, default: true })
   immediateResult?: boolean;

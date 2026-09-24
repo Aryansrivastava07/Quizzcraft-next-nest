@@ -5,6 +5,7 @@ import Link from "next/link";
 import CosmicCanvas from "@/components/canvas/CosmicCanvas";
 import Navbar from "@/components/layout/Navbar";
 import ParallaxReveal from "@/components/ui/ParallaxReveal";
+import AuthFooter from "@/components/layout/AuthFooter";
 
 export default function NotFoundContent() {
   return (
@@ -34,7 +35,7 @@ export default function NotFoundContent() {
             {/* Pill Header */}
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container border border-outline-variant/30 text-xs font-label-code text-tertiary mb-4">
               <span className="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse" />
-              <span>404 // RESTRICTED OR NON-EXISTENT COORDINATE</span>
+              <span>404 // ROUTE NOT FOUND</span>
             </div>
 
             {/* Primary Headline */}
@@ -44,7 +45,7 @@ export default function NotFoundContent() {
 
             {/* Description */}
             <p className="text-xs sm:text-sm font-body-md text-on-surface-variant max-w-md mx-auto mb-8 leading-relaxed">
-              The coordinate or node you requested does not exist in this sector, or your active session does not have clearance. Public access is limited to the orbital home and live join arena.
+              The page or orbital coordinate you requested does not exist in this sector. It may have been moved, renamed, or never existed.
             </p>
 
             {/* Action Buttons */}
@@ -66,24 +67,13 @@ export default function NotFoundContent() {
                 </span>
                 <span>Join Live Quiz</span>
               </Link>
-
-              <Link
-                href="/auth"
-                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-surface-container-low/60 hover:bg-surface-container text-on-surface-variant hover:text-white font-label-code text-xs border border-outline-variant/20 active:scale-95 transition-all flex items-center justify-center gap-1.5"
-              >
-                <span className="material-symbols-outlined text-sm">login</span>
-                <span>Sign In</span>
-              </Link>
             </div>
           </div>
         </ParallaxReveal>
       </main>
 
-      {/* Footer */}
-      <footer className="relative z-10 w-full max-w-max-width-canvas mx-auto px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-on-surface-variant font-label-code text-xs border-t border-outline-variant/20">
-        <span>QuizzCraft Autonomous Navigation Guard</span>
-        <span>Status: 404 Orbital Coordinate Missing</span>
-      </footer>
+      {/* Reusable Footer */}
+      <AuthFooter copyrightText="© 2026 QuizzCraft.app • Route Navigation Guard" />
     </div>
   );
 }

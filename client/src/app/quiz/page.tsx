@@ -8,6 +8,7 @@ import ParallaxReveal from "@/components/ui/ParallaxReveal";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import { quizService } from "@/lib/api/quiz-service";
 import { profileService } from "@/lib/api/profile-service";
+import { Quiz } from "@/lib/api/types";
 
 interface QuestionOption {
   key: string;
@@ -44,11 +45,13 @@ function ActiveQuizPlatformContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const quizIdParam = searchParams.get("quizId");
+  const pinParam = searchParams.get("pin");
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [quizId, setQuizId] = useState<string | null>(null);
+  const [quizPin, setQuizPin] = useState<string | null>(null);
   const [quizTitle, setQuizTitle] = useState("Quantum Computing Principles");
   const [immediateResult, setImmediateResult] = useState(true);
   const [temporalLimit, setTemporalLimit] = useState(true);
@@ -76,41 +79,58 @@ function ActiveQuizPlatformContent() {
       setError(null);
 
       try {
-        let targetQuizId = quizIdParam;
+        let fetchedQuiz: Quiz | null = null;
 
-        // If no quizId in URL parameters, attempt to locate user's latest quiz
-        if (!targetQuizId) {
+        if (quizIdParam) {
+          const res = await quizService.getQuiz(quizIdParam);
+          fetchedQuiz = res.data?.quiz;
+        } else if (pinParam) {
+          const cleanPin = pinParam.replace(/\D/g, "");
+          const res = await quizService.getQuizByPin(cleanPin);
+          fetchedQuiz = res.data?.quiz;
+        } else {
+          // Check cached active quiz
           try {
-            const userQuizzesRes = await profileService.getQuizzes();
-            const userQuizzes = userQuizzesRes.data?.quizzes;
-            if (userQuizzes && userQuizzes.length > 0) {
-              targetQuizId = userQuizzes[0].quizId;
+            const cached = localStorage.getItem("qc_active_quiz");
+            if (cached) {
+              const parsed = JSON.parse(cached);
+              if (parsed?.quizId) {
+                const res = await quizService.getQuiz(parsed.quizId);
+                fetchedQuiz = res.data?.quiz || parsed;
+              }
             }
           } catch (e) {
-            console.warn("Could not query user quizzes fallback:", e);
+            console.warn("Could not parse cached quiz:", e);
+          }
+
+          // If still no quiz target, query user's latest quiz
+          if (!fetchedQuiz) {
+            try {
+              const userQuizzesRes = await profileService.getQuizzes();
+              const userQuizzes = userQuizzesRes.data?.quizzes;
+              if (userQuizzes && userQuizzes.length > 0) {
+                const res = await quizService.getQuiz(userQuizzes[0].quizId);
+                fetchedQuiz = res.data?.quiz;
+              }
+            } catch (e) {
+              console.warn("Could not query user quizzes fallback:", e);
+            }
           }
         }
 
-        if (!targetQuizId) {
+        if (!isMounted) return;
+
+        if (!fetchedQuiz) {
           setError(
-            "No quiz target specified. Please select a quiz from your mission dashboard or enter a live room code."
+            "No quiz target specified. Please select a quiz from your mission dashboard or enter a valid room PIN."
           );
           setIsLoading(false);
           return;
         }
 
-        const res = await quizService.getQuiz(targetQuizId);
-        if (!isMounted) return;
-
-        if (!res.data?.quiz) {
-          setError("Failed to load quiz telemetry from database.");
-          setIsLoading(false);
-          return;
-        }
-
-        const fetchedQuiz = res.data.quiz;
         setQuizTitle(fetchedQuiz.title || "Quantum Computing Principles");
         setQuizId(fetchedQuiz.quizId);
+        setQuizPin(fetchedQuiz.pin || pinParam || null);
         // Accommodate immediateResult, temporalLimit, questime, and dynamicShuffle columns from database
         setImmediateResult(fetchedQuiz.immediateResult !== false);
         const hasTemporalLimit = fetchedQuiz.temporalLimit !== false;
@@ -126,7 +146,7 @@ function ActiveQuizPlatformContent() {
           return;
         }
 
-        const mapped: ActiveQuizQuestion[] = backendQuestions.map((q, idx) => {
+        const mapped: ActiveQuizQuestion[] = backendQuestions.map((q: any, idx: number) => {
           const rawLevel = (q.level || "MEDIUM").toUpperCase();
           const level: "EASY" | "MEDIUM" | "HARD" =
             rawLevel === "EASY" ? "EASY" : rawLevel === "HARD" ? "HARD" : "MEDIUM";
@@ -185,7 +205,7 @@ function ActiveQuizPlatformContent() {
 
         // Establish an attempt session in backend
         try {
-          const attemptRes = await quizService.createAttempt(targetQuizId);
+          const attemptRes = await quizService.createAttempt(fetchedQuiz.quizId);
           const session = attemptRes.data?.session || attemptRes.data?.createSession;
           if (session?.sessionId) {
             setSessionId(session.sessionId);
@@ -406,6 +426,14 @@ function ActiveQuizPlatformContent() {
               </span>
               <span>{streak}x Streak (+{streak * 25} XP)</span>
             </div>
+
+            {/* Room PIN Pill */}
+            {quizPin && (
+              <div className="hidden md:flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-container-high border border-primary/30 text-primary font-bold">
+                <span className="material-symbols-outlined text-xs">pin</span>
+                <span>PIN: {quizPin}</span>
+              </div>
+            )}
 
             {/* Score Pill */}
             <div className="flex items-center gap-1 px-3 py-1 rounded-full bg-surface-container-high border border-outline-variant/40 text-tertiary font-bold">

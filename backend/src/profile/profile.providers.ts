@@ -2,6 +2,7 @@ import { Connection } from 'mongoose';
 import { UserSchema } from '../schemas/user.schema';
 import { QuizSchema } from '../schemas/quiz.schema';
 import { AttemptsSchema } from '../schemas/attempts.schema';
+import { TicketSchema } from '../schemas/ticket.schema';
 
 export const ProfileProviders = [
   {
@@ -20,6 +21,12 @@ export const ProfileProviders = [
     provide: 'ATTEMPTS_MODEL',
     useFactory: (connection: Connection) =>
       connection.model('Attempts', AttemptsSchema),
+    inject: ['DATABASE_CONNECTION'],
+  },
+  {
+    provide: 'TICKET_MODEL',
+    useFactory: (connection: Connection) =>
+      connection.model('Ticket', TicketSchema),
     inject: ['DATABASE_CONNECTION'],
   },
 ];

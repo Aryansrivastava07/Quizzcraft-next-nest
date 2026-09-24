@@ -23,6 +23,7 @@ import {
   attemptQuizDto,
   answerQuizDto,
   editQuestionDto,
+  deployQuizDto,
 } from './dto/quiz.request.dto';
 import { QuizService } from './quiz.service';
 
@@ -93,6 +94,55 @@ export class QuizController {
   ) {
     const userId = req.user.userId;
     return this.quizService.getScore(sessionId, userId);
+  }
+
+  @HttpCode(200)
+  @Get('pin/:pin')
+  async getQuizByPin(@Param('pin') pin: string, @Query('email') email?: string) {
+    return this.quizService.getQuizByPin(pin, email);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  @Post(':quizId/deploy')
+  async deployQuiz(
+    @Param('quizId') quizId: string,
+    @Body() dto: deployQuizDto,
+    @Request() req,
+  ) {
+    const userId = req.user.userId;
+    return this.quizService.deployQuiz(quizId, userId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  @Get(':quizId/admin')
+  async getQuizAdminData(
+    @Param('quizId') quizId: string,
+    @Request() req,
+  ) {
+    const userId = req.user.userId;
+    return this.quizService.getQuizAdminData(quizId, userId);
+  }
+
+  @HttpCode(200)
+  @Post(':quizId/waitlist')
+  async joinWaitlist(
+    @Param('quizId') quizId: string,
+    @Body('email') email: string,
+  ) {
+    return this.quizService.joinWaitlist(quizId, email);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  @Post(':quizId/close')
+  async closeQuiz(
+    @Param('quizId') quizId: string,
+    @Request() req,
+  ) {
+    const userId = req.user.userId;
+    return this.quizService.closeQuiz(quizId, userId);
   }
 
   @HttpCode(200)

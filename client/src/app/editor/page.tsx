@@ -171,6 +171,7 @@ function CreatorEditorContent() {
   const quizIdParam = searchParams.get("quizId");
 
   const [quizId, setQuizId] = useState<string | null>(quizIdParam);
+  const [quizPin, setQuizPin] = useState<string | null>(null);
   const [quizTitle, setQuizTitle] = useState<string>("Artificial Intelligence Fundamentals");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -228,6 +229,9 @@ function CreatorEditorContent() {
             const fetched = response.data.quiz;
             setQuizTitle(fetched.title || "Custom Generated Quiz");
             setQuizId(fetched.quizId);
+            if (fetched.pin) {
+              setQuizPin(fetched.pin);
+            }
             if (fetched.immediateResult !== undefined) {
               setImmediateResult(fetched.immediateResult);
             }
@@ -559,6 +563,12 @@ function CreatorEditorContent() {
                     ID: {quizId.slice(0, 8)}...
                   </span>
                 )}
+                {quizPin && (
+                  <span className="font-label-code text-[11px] text-tertiary bg-tertiary/10 px-2.5 py-0.5 rounded border border-tertiary/30 font-bold flex items-center gap-1 shadow-sm">
+                    <span className="material-symbols-outlined text-xs">pin</span>
+                    PIN: {quizPin.length === 6 ? `${quizPin.slice(0, 3)}-${quizPin.slice(3)}` : quizPin}
+                  </span>
+                )}
                 {/* Dedicated Total EXP Tab */}
                 <span className="font-label-code px-2.5 py-0.5 rounded-full bg-tertiary/10 text-tertiary border border-tertiary/30 font-bold flex items-center gap-1 shadow-sm">
                   <span className="material-symbols-outlined text-xs">electric_bolt</span>
@@ -580,6 +590,14 @@ function CreatorEditorContent() {
                 <span>{totalExp} TOTAL XP</span>
               </div>
 
+              <button
+                type="button"
+                onClick={() => router.push(quizId ? `/deploy?quizId=${quizId}` : "/deploy")}
+                className="px-3.5 py-2 rounded-xl bg-surface-container-high hover:bg-surface-container border border-primary/40 text-primary font-headline-sm text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all shadow-sm cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-base">hub</span>
+                <span>Deploy &amp; Share</span>
+              </button>
 
               <button
                 type="button"

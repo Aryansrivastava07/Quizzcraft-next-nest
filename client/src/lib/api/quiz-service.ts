@@ -16,6 +16,19 @@ export const quizService = {
     const formData = new FormData();
     formData.append("prompt", params.prompt);
 
+    if (params.questionCount !== undefined) {
+      formData.append("questionCount", String(params.questionCount));
+    }
+    if (params.difficulty) {
+      formData.append("difficulty", params.difficulty);
+    }
+    if (params.quizType) {
+      formData.append("quizType", params.quizType);
+    }
+    if (params.sourceUrl) {
+      formData.append("sourceUrl", params.sourceUrl);
+    }
+
     if (params.images && params.images.length > 0) {
       params.images.slice(0, 5).forEach((file) => {
         formData.append("images", file);
@@ -51,6 +64,19 @@ export const quizService = {
         method: "GET",
       }
     );
+  },
+
+  /**
+   * Fetch quiz details and questions by 6-digit room PIN
+   * @param pin The 6-digit PIN of the quiz
+   */
+  async getQuizByPin(pin: string, email?: string) {
+    const cleanPin = pin.replace(/\D/g, "");
+    const baseRoute = API_ROUTES.quiz.getByPin(cleanPin || pin);
+    const url = email ? `${baseRoute}?email=${encodeURIComponent(email)}` : baseRoute;
+    return apiClient<any>(url, {
+      method: "GET",
+    });
   },
 
   /**
@@ -177,5 +203,91 @@ export const quizService = {
     return apiClient<number>(API_ROUTES.quiz.getScore(sessionId), {
       method: "GET",
     });
+  },
+
+  /**
+   * Deploy a quiz with protocol (LIVE, SCHEDULED, ANYTIME) and access controls
+   */
+  async deployQuiz(
+    quizId: string,
+    payload: {
+      deploymentType: "LIVE" | "SCHEDULED" | "ANYTIME";
+      accessMode?: "PUBLIC" | "PRIVATE" | "ORGANIZATION";
+      organizationDomain?: string;
+      scheduledFor?: string;
+      liveDurationMinutes?: number;
+      antiCheat?: boolean;
+      fullScreenLock?: boolean;
+      shuffleChoices?: boolean;
+      allowRetries?: boolean;
+      isPractice?: boolean;
+    }
+  ) {
+    return apiClient<{
+      quiz: Quiz;
+      deploymentType: string;
+      status: string;
+      accessMode: string;
+      adminUrl: string;
+      joinUrl: string;
+      pin?: string;
+    }>(API_ROUTES.quiz.deploy(quizId), {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /**
+   * Fetch live admin telemetry, attendees, average score, and leaderboard
+   */
+  async getQuizAdminData(quizId: string) {
+    return apiClient<{
+      quiz: Quiz;
+      attendeesCount: number;
+      activeAttendeesCount: number;
+      averageScore: number;
+      waitingCadetsCount: number;
+      waitingList: string[];
+      leaderboard: Array<{
+        sessionId: string;
+        userId: string;
+        username: string;
+        fullName: string;
+        avatar: string;
+        score: number;
+        totalQuestions: number;
+        percentage: number;
+        isActive: boolean;
+        lastUpdateAt: string;
+      }>;
+      isOwner: boolean;
+    }>(API_ROUTES.quiz.admin(quizId), {
+      method: "GET",
+    });
+  },
+
+  /**
+   * Join waitlist for scheduled quiz
+   */
+  async joinWaitlist(quizId: string, email: string) {
+    return apiClient<{ quizId: string; waitingCadetsCount: number; joined: boolean }>(
+      API_ROUTES.quiz.waitlist(quizId),
+      {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      }
+    );
+  },
+
+  /**
+   * Conclude and close a live quiz arena session
+   */
+  async closeQuiz(quizId: string) {
+    return apiClient<{ quizId: string; status: string; closed: boolean }>(
+      API_ROUTES.quiz.close(quizId),
+      {
+        method: "POST",
+      }
+    );
   },
 };

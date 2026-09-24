@@ -22,6 +22,8 @@ export const API_ROUTES = {
     sendPasswordResetMail: `${API_BASE_URL}/auth/send-password-reset-mail`, // POST
     verifyPasswordResetOTP: `${API_BASE_URL}/auth/verify-password-reset-otp`, // POST (sets RESET_PASS_TOKEN cookie)
     resetPassword: `${API_BASE_URL}/auth/reset-password`,          // POST (ResetPassGuard)
+    checkUsername: (username: string) =>
+      `${API_BASE_URL}/auth/check-username?username=${encodeURIComponent(username)}`, // GET
   },
 
   // ==========================================
@@ -35,6 +37,8 @@ export const API_ROUTES = {
     generate: `${API_BASE_URL}/api/quiz/generate`,
     // GET: Fetch quiz details and questions by quizId
     get: (quizId: string) => `${API_BASE_URL}/api/quiz/${quizId}`,
+    // GET: Fetch quiz details and questions by 6-digit PIN
+    getByPin: (pin: string) => `${API_BASE_URL}/api/quiz/pin/${encodeURIComponent(pin)}`,
     // PUT: Update quiz details and questions by quizId
     update: (quizId: string) => `${API_BASE_URL}/api/quiz/${quizId}`,
     // PUT: Edit a single question inside a quiz
@@ -53,6 +57,14 @@ export const API_ROUTES = {
     submitAttempt: (sessionId: string) => `${API_BASE_URL}/api/quiz/attempt/submit/${sessionId}`,
     // GET: Calculate final score for submitted session
     getScore: (sessionId: string) => `${API_BASE_URL}/api/quiz/score/${sessionId}`,
+    // POST: Deploy quiz with protocol, access mode, and duration
+    deploy: (quizId: string) => `${API_BASE_URL}/api/quiz/${quizId}/deploy`,
+    // GET: Admin telemetry, attendees, average score, and live leaderboard
+    admin: (quizId: string) => `${API_BASE_URL}/api/quiz/${quizId}/admin`,
+    // POST: Join waitlist for scheduled quiz
+    waitlist: (quizId: string) => `${API_BASE_URL}/api/quiz/${quizId}/waitlist`,
+    // POST: Conclude/close live quiz session
+    close: (quizId: string) => `${API_BASE_URL}/api/quiz/${quizId}/close`,
   },
 
   // ==========================================
@@ -70,5 +82,16 @@ export const API_ROUTES = {
     quizzes: `${API_BASE_URL}/api/profile/quizzes`,
     // GET: Get past quiz attempts for authenticated user (from JWT email)
     history: `${API_BASE_URL}/api/profile/history`,
+    // PUT: Update user settings & preferences
+    settings: `${API_BASE_URL}/api/profile/settings`,
+    // POST: Submit a support ticket
+    ticket: `${API_BASE_URL}/api/profile/ticket`,
+    // GET: Check username availability
+    checkUsername: (username: string) =>
+      `${API_BASE_URL}/api/profile/check-username?username=${encodeURIComponent(username)}`,
+    // POST: Link additional / organization email
+    linkEmail: `${API_BASE_URL}/api/profile/link-email`,
+    // POST: Unlink email
+    unlinkEmail: `${API_BASE_URL}/api/profile/unlink-email`,
   },
 } as const;

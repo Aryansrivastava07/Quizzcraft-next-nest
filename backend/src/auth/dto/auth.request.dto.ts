@@ -1,4 +1,12 @@
-import { IsEmail, IsNotEmpty, IsString, IsStrongPassword } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsString,
+  IsStrongPassword,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class LoginAuthDto {
       @IsEmail()
@@ -12,6 +20,11 @@ export class LoginAuthDto {
 export class RegisterAuthDto {
       @IsString()
       @IsNotEmpty()
+      @Matches(/^[a-z0-9]+$/, {
+        message: 'Username must contain only lowercase letters and numbers with no special characters',
+      })
+      @MinLength(3, { message: 'Username must be at least 3 characters long' })
+      @MaxLength(30, { message: 'Username cannot exceed 30 characters' })
       username!: string;
 
       @IsEmail()

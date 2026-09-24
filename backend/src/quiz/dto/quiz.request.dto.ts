@@ -6,6 +6,21 @@ export class generateQuizDto {
   prompt!: string;
 
   @IsOptional()
+  questionCount?: number | string;
+
+  @IsOptional()
+  @IsString()
+  difficulty?: string;
+
+  @IsOptional()
+  @IsString()
+  quizType?: string;
+
+  @IsOptional()
+  @IsString()
+  sourceUrl?: string;
+
+  @IsOptional()
   images!: Express.Multer.File[];
 
   @IsOptional()
@@ -51,3 +66,38 @@ export class editQuestionDto {
   @IsString()
   level?: string;
 }
+
+export class deployQuizDto {
+  @IsString()
+  @IsNotEmpty()
+  deploymentType!: 'LIVE' | 'SCHEDULED' | 'ANYTIME';
+
+  @IsOptional()
+  @IsString()
+  accessMode?: 'PUBLIC' | 'PRIVATE' | 'ORGANIZATION';
+
+  @IsOptional()
+  @IsString()
+  organizationDomain?: string;
+
+  @IsOptional()
+  scheduledFor?: string | Date;
+
+  @IsOptional()
+  liveDurationMinutes?: number;
+
+  @IsOptional()
+  antiCheat?: boolean;
+
+  @IsOptional()
+  fullScreenLock?: boolean;
+
+  @IsOptional()
+  shuffleChoices?: boolean;
+
+  @IsOptional()
+  allowRetries?: boolean;
+
+  @IsOptional()
+  isPractice?: boolean;
+}

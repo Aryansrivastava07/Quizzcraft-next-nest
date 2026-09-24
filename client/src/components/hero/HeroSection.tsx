@@ -32,15 +32,6 @@ export default function HeroSection() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center">
         {/* Left Copy Column with Parallax Reveal */}
         <div className="lg:col-span-7 flex flex-col items-start gap-5">
-          <ParallaxReveal direction="up" distance={20} delay={50} duration={700}>
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface-container/90 border border-outline-variant/50 text-tertiary font-headline-sm text-xs shadow-sm backdrop-blur-md">
-              <span className="w-2 h-2 rounded-full bg-tertiary animate-pulse" />
-              <span className="tracking-wide uppercase font-label-code text-[11px]">
-                Spatial Quiz Engine • Document to Interactive Rooms
-              </span>
-            </div>
-          </ParallaxReveal>
-
           <ParallaxReveal direction="up" distance={30} delay={150} duration={800}>
             <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[52px] lg:leading-[1.15] font-display-hero font-extrabold tracking-tight text-white">
               Turn Static Notes into{" "}

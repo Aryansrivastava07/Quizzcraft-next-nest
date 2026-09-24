@@ -1,5 +1,4 @@
 import React from "react";
-import ChapterBadge from "../ui/ChapterBadge";
 import GlassCard from "../ui/GlassCard";
 import ParallaxReveal from "../ui/ParallaxReveal";
 
@@ -54,10 +53,6 @@ export default function SacredSynthesisSection() {
     >
       <ParallaxReveal direction="up" distance={30} duration={750}>
         <div className="flex flex-col items-center text-center max-w-2xl mx-auto mb-12">
-          <ChapterBadge
-            title="THREE-STEP WORKFLOW"
-            variant="primary"
-          />
           <h2 className="text-2xl sm:text-3xl md:text-4xl text-white font-headline-xl font-bold">
             How It Works
           </h2>
@@ -72,15 +67,19 @@ export default function SacredSynthesisSection() {
           <ParallaxReveal
             key={step.num}
             direction="up"
-            distance={35}
+            distance={40}
+            depth={-140}
+            pitch={9}
             delay={idx * 140}
-            duration={800}
-            parallaxSpeed={0.015}
+            duration={850}
+            parallaxSpeed={0.016}
+            ambientFloat={true}
+            floatDelay={idx * 0.45}
             className="h-full"
           >
             <GlassCard
               hoverEffect
-              className="rounded-2xl p-6 sm:p-7 flex flex-col justify-between group border-outline-variant/30 h-full transition-all duration-300 hover:border-primary/40 hover:-translate-y-1.5"
+              className="rounded-2xl p-6 sm:p-7 flex flex-col justify-between group border-outline-variant/30 h-full transition-all duration-300 hover:border-primary/40"
             >
               <div className="space-y-3">
                 <div className="flex justify-between items-start">

@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useAuth } from "@/lib/auth/auth-context";
-import NotFoundContent from "@/components/ui/NotFoundContent";
+import AuthRequiredContent from "@/components/auth/AuthRequiredContent";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -28,9 +28,9 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  // If user is not authenticated or has logged out, display Page Not Found
+  // If user is not authenticated or has logged out, display proper reason for current route
   if (!user) {
-    return <NotFoundContent />;
+    return <AuthRequiredContent />;
   }
 
   return <>{children}</>;

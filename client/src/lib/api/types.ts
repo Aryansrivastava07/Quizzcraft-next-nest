@@ -54,11 +54,13 @@ export interface ResetPasswordAuthDto {
 export interface UserMe {
   userId: string;
   email: string;
+  emails?: string[];
   username: string;
   verified: boolean;
   profilePicture?: string;
   averageScore?: number;
   quizAttempted?: number;
+  xp?: number;
   createdAt?: string;
 }
 
@@ -80,7 +82,24 @@ export interface QuizStats {
 
 export interface Quiz {
   quizId: string;
+  pin?: string;
   title: string;
+  ownerId?: string;
+  ownerEmail?: string;
+  accessMode?: "PUBLIC" | "PRIVATE" | "ORGANIZATION";
+  organizationDomain?: string;
+  deploymentType?: "LIVE" | "SCHEDULED" | "ANYTIME";
+  status?: "DRAFT" | "SCHEDULED" | "LIVE" | "ANYTIME" | "ENDED";
+  scheduledFor?: string;
+  liveDurationMinutes?: number;
+  liveUntil?: string;
+  scheduledAlertSent?: boolean;
+  waitingList?: string[];
+  isPractice?: boolean;
+  antiCheat?: boolean;
+  fullScreenLock?: boolean;
+  shuffleChoices?: boolean;
+  allowRetries?: boolean;
   immediateResult?: boolean;
   questime?: number;
   dynamicShuffle?: boolean;
@@ -92,6 +111,10 @@ export interface Quiz {
 
 export interface GenerateQuizParams {
   prompt: string;
+  questionCount?: number;
+  difficulty?: string;
+  quizType?: string;
+  sourceUrl?: string;
   images?: File[];
   videos?: File[];
   pdfs?: File[];
@@ -115,21 +138,59 @@ export interface AnswerQuizDto {
   option: string;
 }
 
-// ==================== PROFILE TYPES ====================
+// ==================== PROFILE & SETTINGS TYPES ====================
+export interface UserSettings {
+  starfieldMotion: boolean;
+  highContrast: boolean;
+  kioskAutoLock: boolean;
+  liveArenaInvites: boolean;
+  leaderboardSurgeAlerts: boolean;
+  weeklyDigest: boolean;
+}
+
 export interface UserProfile {
   _id?: string;
+  userId?: string;
   username: string;
+  fullName?: string;
   email: string;
   verified: boolean;
-  profilePicture: string;
-  mobileNo: number | null;
-  address: string;
-  dateOfBirth: string | null;
-  averageScore: number;
-  quizAttempted: number;
+  profilePicture?: string;
+  institution?: string;
+  bio?: string;
+  mobileNo?: number | null;
+  address?: string;
+  dateOfBirth?: string | null;
+  averageScore?: number;
+  quizAttempted?: number;
+  xp?: number;
+  settings?: UserSettings;
+  createdAt?: string;
 }
 
 export interface UpdateProfileDto {
   email: string;
-  userName: string;
+  userName?: string;
+  fullName?: string;
+  institution?: string;
+  bio?: string;
+  profilePicture?: string;
+  mobileNo?: number | null;
+  address?: string;
+  dateOfBirth?: string | null;
+  xp?: number;
+}
+
+export interface CreateTicketDto {
+  category: string;
+  urgency: string;
+  subject: string;
+  message: string;
+}
+
+export interface CheckUsernameResponse {
+  available: boolean;
+  valid: boolean;
+  message: string;
+  isCurrent?: boolean;
 }

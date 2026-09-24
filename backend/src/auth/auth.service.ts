@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -93,19 +94,67 @@ export class AuthService {
     };
   }
 
+  async checkUsernameAvailability(
+    rawUsername: string,
+  ): Promise<ServiceResponse<{ available: boolean; valid: boolean; message: string }>> {
+    const username = (rawUsername || '').toLowerCase().trim();
+    if (!/^[a-z0-9]{3,30}$/.test(username)) {
+      return {
+        message: 'Invalid username format',
+        data: {
+          available: false,
+          valid: false,
+          message: 'Username must be 3-30 lowercase alphanumeric characters with no special symbols',
+        },
+      };
+    }
+
+    const existingUser = await this.UserModel.findOne({ username });
+    if (existingUser) {
+      return {
+        message: 'Username is taken',
+        data: {
+          available: false,
+          valid: true,
+          message: 'Username is already taken',
+        },
+      };
+    }
+
+    return {
+      message: 'Username is available',
+      data: {
+        available: true,
+        valid: true,
+        message: 'Username is available',
+      },
+    };
+  }
+
   async register(
     dto: RegisterAuthDto,
   ): Promise<ServiceResponse<RegisterResponseData>> {
+    const username = (dto.username || '').toLowerCase().trim();
+    if (!/^[a-z0-9]{3,30}$/.test(username)) {
+      throw new BadRequestException(
+        'Username must contain only lowercase letters and numbers (3-30 characters) with no special symbols',
+      );
+    }
+    dto.username = username;
+
     const hashedPassword = await hashPassword(dto.password, this.getSalt());
+    const normalizedEmail = (dto.email || '').toLowerCase().trim();
+    dto.email = normalizedEmail;
+
     try {
       const OTP = Math.floor(100000 + Math.random() * 900000).toString();
       const createdUser = await this.UserModel.create({
         ...dto,
+        email: normalizedEmail,
+        emails: [normalizedEmail],
         password: hashedPassword,
       });
       const hashedOTP = await hashPassword(OTP, this.getSalt());
-      // createdUser.verificationId = hashedOTP;
-      // createdUser.verificationIdExpiry = new Date(Date.now() + 10 * 60 * 1000);
       const cacheKey = `reg-otp-${createdUser.email}`;
       await this.cacheManager.set(cacheKey, hashedOTP, 1000 * 60 * 2);
 
@@ -116,7 +165,6 @@ export class AuthService {
         data: { user: toRegisterDto(createdUser) },
       };
     } catch (error: any) {
-      // console.log(error);
       if (error.code === 11000) {
         throw new ConflictException(error.errorResponse);
       }
@@ -127,11 +175,19 @@ export class AuthService {
   }
 
   async login(dto: LoginAuthDto): Promise<ServiceResponse<LoginResponseData>> {
-    const user = await this.UserModel.findOne({ email: dto.email });
+    const normalizedEmail = (dto.email || '').toLowerCase().trim();
+    const user = await this.UserModel.findOne({
+      $or: [{ email: normalizedEmail }, { emails: normalizedEmail }],
+    });
     if (!user) throw new NotFoundException('User not found');
 
     const isMatch = await comparePassword(dto.password, user.password);
     if (!isMatch) throw new UnauthorizedException();
+
+    // Ensure user has emails array populated
+    if (!user.emails || user.emails.length === 0) {
+      user.emails = [user.email];
+    }
 
     const { accessToken, refreshToken, hashedRefreshToken } =
       await this.generateAuthTokens(String(user._id), user.email);

@@ -2,7 +2,6 @@
 
 import React from "react";
 import Link from "next/link";
-import ChapterBadge from "../ui/ChapterBadge";
 import ParallaxReveal from "../ui/ParallaxReveal";
 
 export default function AfterlightSection() {
@@ -11,15 +10,19 @@ export default function AfterlightSection() {
       className="py-20 px-gutter-mobile md:px-gutter-desktop max-w-max-width-canvas mx-auto relative z-10"
       id="ch-05"
     >
-      <ParallaxReveal direction="up" distance={35} duration={850} parallaxSpeed={0.02}>
+      <ParallaxReveal
+        direction="up"
+        distance={42}
+        depth={-140}
+        pitch={8}
+        duration={900}
+        parallaxSpeed={0.018}
+        ambientFloat={true}
+        floatDelay={0.2}
+      >
         {/* Sleek Single-Color Surface - No Harsh Visible Gradient or Colored Orbs */}
         <div className="relative rounded-3xl overflow-hidden p-8 sm:p-12 md:p-14 bg-[#0a0d18] border border-outline-variant/40 shadow-2xl">
           <div className="relative z-10 max-w-2xl mx-auto text-center space-y-5">
-            <ChapterBadge
-              title="STUDIO ACCESS"
-              variant="primary"
-            />
-
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-headline-xl font-extrabold text-white leading-tight">
               Ready to Transform Your Content?
             </h2>

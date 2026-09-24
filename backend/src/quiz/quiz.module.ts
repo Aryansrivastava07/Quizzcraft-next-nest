@@ -4,10 +4,13 @@ import { QuizService } from './quiz.service';
 import { QuizProviders } from './quiz.provider';
 import { DbModule } from '../db/db.module';
 import { AiModule } from '../ai/ai.module';
+import { MailModule } from '../mail/mail.module';
+import { QuizSchedulerService } from './quiz-scheduler.service';
 
 @Module({
-  imports: [DbModule, AiModule],
+  imports: [DbModule, AiModule, MailModule],
   controllers: [QuizController],
-  providers: [QuizService, ...QuizProviders],
+  providers: [QuizService, QuizSchedulerService, ...QuizProviders],
 })
 export class QuizModule {}
+

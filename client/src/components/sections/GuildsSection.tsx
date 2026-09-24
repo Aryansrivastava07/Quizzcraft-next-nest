@@ -1,6 +1,5 @@
 import React from "react";
 import Link from "next/link";
-import ChapterBadge from "../ui/ChapterBadge";
 import GlassCard from "../ui/GlassCard";
 import ParallaxReveal from "../ui/ParallaxReveal";
 
@@ -59,10 +58,6 @@ export default function GuildsSection() {
     >
       <ParallaxReveal direction="up" distance={30} duration={750}>
         <div className="flex flex-col items-center text-center max-w-2xl mx-auto mb-12">
-          <ChapterBadge
-            title="FLEXIBLE WORKSPACES"
-            variant="primary"
-          />
           <h2 className="text-2xl sm:text-3xl md:text-4xl text-white font-headline-xl font-bold">
             Tailored For Any Classroom or Team
           </h2>
@@ -77,15 +72,19 @@ export default function GuildsSection() {
           <ParallaxReveal
             key={item.title}
             direction="up"
-            distance={35}
+            distance={40}
+            depth={-140}
+            pitch={9}
             delay={idx * 130}
-            duration={800}
+            duration={850}
             parallaxSpeed={0.015}
+            ambientFloat={true}
+            floatDelay={idx * 0.45}
             className="h-full"
           >
             <GlassCard
               hoverEffect
-              className="rounded-2xl p-6 sm:p-7 border-outline-variant/30 flex flex-col justify-between group h-full transition-all duration-300 hover:border-primary/40 hover:-translate-y-1.5"
+              className="rounded-2xl p-6 sm:p-7 border-outline-variant/30 flex flex-col justify-between group h-full transition-all duration-300 hover:border-primary/40"
             >
               <div className="space-y-3">
                 <div

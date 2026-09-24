@@ -55,7 +55,7 @@ export default function CosmicVoidCanvas() {
         const hy = Math.random() * height;
         const colorPrefix =
           starColors[Math.floor(Math.random() * starColors.length)];
-        const baseAlpha = 0.25 + Math.random() * 0.55;
+        const baseAlpha = 0.18 + Math.random() * 0.35;
         const radius =
           Math.random() < 0.2 ? 1.5 : Math.random() < 0.7 ? 1.0 : 0.7;
 
@@ -152,6 +152,12 @@ export default function CosmicVoidCanvas() {
         } else {
           p.alpha += (p.baseAlpha - p.alpha) * 0.1;
         }
+
+        // Subtle diagonal deep-space drift (mix of vertical & horizontal transition)
+        p.homeX = (p.homeX - 0.08) % width;
+        if (p.homeX < 0) p.homeX += width;
+        p.homeY = (p.homeY - 0.13) % height;
+        if (p.homeY < 0) p.homeY += height;
 
         // Return force to home coordinate
         const returnDx = p.homeX - p.x;
