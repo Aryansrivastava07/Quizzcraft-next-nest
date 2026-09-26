@@ -162,7 +162,7 @@ function DeployScheduleContent() {
 
       // Fetch User's Linked Emails to check organization status
       try {
-        const meRes = await authService.me();
+        const meRes = await authService.getMe();
         const user = meRes?.data?.user;
         if (user) {
           const emails = Array.isArray(user.emails) && user.emails.length > 0

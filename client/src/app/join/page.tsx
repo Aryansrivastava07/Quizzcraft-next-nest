@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import CosmicCanvas from "@/components/canvas/CosmicCanvas";
@@ -35,7 +35,7 @@ interface EndedQuizData {
   message: string;
 }
 
-export default function JoinQuizPage() {
+function JoinQuizContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isLoading, refreshUser } = useAuth();
@@ -831,5 +831,21 @@ export default function JoinQuizPage() {
       {/* Footer */}
       <AuthFooter />
     </main>
+  );
+}
+
+export default function JoinQuizPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-surface text-on-surface">
+          <span className="material-symbols-outlined text-4xl text-primary animate-spin">
+            progress_activity
+          </span>
+        </div>
+      }
+    >
+      <JoinQuizContent />
+    </Suspense>
   );
 }

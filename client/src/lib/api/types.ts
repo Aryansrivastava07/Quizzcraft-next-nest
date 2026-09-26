@@ -153,7 +153,8 @@ export interface UserProfile {
   userId?: string;
   username: string;
   fullName?: string;
-  email: string;
+  email?: string;
+  emails: string[];
   verified: boolean;
   profilePicture?: string;
   institution?: string;

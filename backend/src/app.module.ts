@@ -9,6 +9,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { ScheduleModule } from '@nestjs/schedule';
 import { QuizModule } from './quiz/quiz.module';
 import { AiModule } from './ai/ai.module';
+import { HealthModule } from './health/health.module';
 import KeyvRedis from '@keyv/redis';
 
 @Module({
@@ -29,6 +30,7 @@ import KeyvRedis from '@keyv/redis';
     }),
     QuizModule,
     AiModule,
+    HealthModule,
   ],
 })
 
