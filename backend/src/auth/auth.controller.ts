@@ -24,12 +24,15 @@ import { ResetPassGuard } from '../common/guards/reset-pass.guard';
 export class AuthController {
   constructor(private readonly authService: AuthService) { }
 
-  private getCookieOptions(maxAge: number) {
+  private getCookieOptions(req: any, maxAge: number) {
     const isProd = process.env.NODE_ENV === 'production';
+    const isHttps = req?.secure || req?.headers?.['x-forwarded-proto'] === 'https';
+    const isSecure = isProd || isHttps;
     return {
       httpOnly: true,
-      secure: isProd,
-      sameSite: (isProd ? 'none' : 'lax') as 'none' | 'lax',
+      secure: isSecure,
+      sameSite: (isSecure ? 'none' : 'lax') as 'none' | 'lax',
+      path: '/',
       maxAge,
     };
   }
@@ -56,12 +59,16 @@ export class AuthController {
 
   @HttpCode(200)
   @Post('login')
-  async login(@Body() loginAuthDto: LoginAuthDto, @Res({ passthrough: true }) response: Response) {
+  async login(
+    @Req() req,
+    @Body() loginAuthDto: LoginAuthDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
     const result = await this.authService.login(loginAuthDto);
     const { accessToken, refreshToken, ...res } = result.data;
 
-    response.cookie('accessToken', accessToken, this.getCookieOptions(1000 * 60 * 10));
-    response.cookie('refreshToken', refreshToken, this.getCookieOptions(1000 * 60 * 60 * 24 * 10));
+    response.cookie('accessToken', accessToken, this.getCookieOptions(req, 1000 * 60 * 10));
+    response.cookie('refreshToken', refreshToken, this.getCookieOptions(req, 1000 * 60 * 60 * 24 * 10));
 
     return {
       message: result.message,
@@ -77,34 +84,30 @@ export class AuthController {
   @HttpCode(200)
   @Post('logout')
   async logout(@Req() req, @Res({ passthrough: true }) response: Response) {
-    const refreshToken = req.cookies?.refreshToken || req.headers?.['x-refresh-token'];
+    const refreshToken = req.cookies?.refreshToken;
     const userId = req.user.userId;
 
     const res = await this.authService.logout({ userId, refreshToken });
     if (!res.data) throw new UnauthorizedException('Logout failed');
 
-    response.clearCookie('accessToken');
-    response.clearCookie('refreshToken');
+    response.clearCookie('accessToken', { path: '/' });
+    response.clearCookie('refreshToken', { path: '/' });
 
     return res;
   }
 
   @HttpCode(200)
   @Post('refresh')
-  async Refresh(
-    @Req() req,
-    @Res({ passthrough: true }) response: Response,
-    @Body() body?: { refreshToken?: string },
-  ) {
-    const refreshToken = req.cookies?.refreshToken || body?.refreshToken || req.headers?.['x-refresh-token'];
+  async Refresh(@Req() req, @Res({ passthrough: true }) response: Response) {
+    const refreshToken = req.cookies?.refreshToken;
     if (!refreshToken) {
       throw new UnauthorizedException('Refresh token not provided');
     }
     const result = await this.authService.refresh({ refreshToken });
     const { accessToken, refreshToken: newRefreshToken, ...res } = result.data;
 
-    response.cookie('accessToken', accessToken, this.getCookieOptions(1000 * 60 * 10));
-    response.cookie('refreshToken', newRefreshToken, this.getCookieOptions(1000 * 60 * 60 * 24 * 10));
+    response.cookie('accessToken', accessToken, this.getCookieOptions(req, 1000 * 60 * 10));
+    response.cookie('refreshToken', newRefreshToken, this.getCookieOptions(req, 1000 * 60 * 60 * 24 * 10));
 
     return {
       message: result.message,
@@ -124,12 +127,16 @@ export class AuthController {
 
   @HttpCode(200)
   @Post('verify-register-otp')
-  async verifyRegsitrationOTP(@Body() dto: VerifyOTPAuthDto, @Res({ passthrough: true }) response: Response) {
+  async verifyRegsitrationOTP(
+    @Req() req,
+    @Body() dto: VerifyOTPAuthDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
     const result = await this.authService.verifyRegistrationOTP(dto);
     const { accessToken, refreshToken, ...res } = result.data;
 
-    response.cookie('accessToken', accessToken, this.getCookieOptions(1000 * 60 * 10));
-    response.cookie('refreshToken', refreshToken, this.getCookieOptions(1000 * 60 * 60 * 24 * 10));
+    response.cookie('accessToken', accessToken, this.getCookieOptions(req, 1000 * 60 * 10));
+    response.cookie('refreshToken', refreshToken, this.getCookieOptions(req, 1000 * 60 * 60 * 24 * 10));
 
     return {
       message: result.message,
@@ -155,11 +162,15 @@ export class AuthController {
 
   @HttpCode(200)
   @Post('verify-password-reset-otp')
-  async verifyPasswordResetOTP(@Body() dto: VerifyOTPAuthDto, @Res({ passthrough: true }) response: Response) {
+  async verifyPasswordResetOTP(
+    @Req() req,
+    @Body() dto: VerifyOTPAuthDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
     const result = await this.authService.verifyPasswordResetOTP(dto);
     const { RESET_PASS_TOKEN, ...res } = result.data;
 
-    response.cookie('RESET_PASS_TOKEN', RESET_PASS_TOKEN, this.getCookieOptions(1000 * 60 * 10));
+    response.cookie('RESET_PASS_TOKEN', RESET_PASS_TOKEN, this.getCookieOptions(req, 1000 * 60 * 10));
 
     return {
       message: result.message,
@@ -174,7 +185,7 @@ export class AuthController {
   @HttpCode(200)
   @Post('reset-password')
   ResetPassword(@Body() dto: ResetPasswordAuthDto, @Res({ passthrough: true }) response: Response) {
-    response.clearCookie('RESET_PASS_TOKEN');
+    response.clearCookie('RESET_PASS_TOKEN', { path: '/' });
     return this.authService.ResetPassword(dto);
   }
 }

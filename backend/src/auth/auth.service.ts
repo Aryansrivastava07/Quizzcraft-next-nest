@@ -211,13 +211,6 @@ export class AuthService {
       { refreshToken: 1 },
     );
     if (!user) throw new NotFoundException('User not found');
-    if (!user.refreshToken)
-      throw new UnauthorizedException('Already logged out or invalid session');
-
-    const isMatch = await comparePassword(dto.refreshToken, user.refreshToken);
-    if (!isMatch) {
-      throw new UnauthorizedException('Invalid session');
-    }
 
     user.refreshToken = '';
     await user.save();

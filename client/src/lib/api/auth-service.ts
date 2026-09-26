@@ -58,14 +58,24 @@ export const authService = {
    * Logout user session and clear cookies
    */
   async logout() {
+    const refreshToken =
+      typeof window !== "undefined"
+        ? localStorage.getItem("quizzcraft_refresh_token")
+        : null;
+
     try {
       return await apiClient<boolean>(API_ROUTES.auth.logout, {
         method: "POST",
+        headers: {
+          ...(refreshToken ? { "x-refresh-token": refreshToken } : {}),
+        },
+        body: refreshToken ? JSON.stringify({ refreshToken }) : undefined,
       });
     } finally {
       if (typeof window !== "undefined") {
         localStorage.removeItem("quizzcraft_access_token");
         localStorage.removeItem("quizzcraft_refresh_token");
+        localStorage.removeItem("quizzcraft_reset_token");
       }
     }
   },

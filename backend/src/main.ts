@@ -11,6 +11,9 @@ async function bootstrap() {
   console.log(`[Server] Bootstrapping QuizzCraft Backend in ${env} mode...`);
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  // Trust reverse proxies (Render, Vercel, Railway, Cloudflare, etc.) so that secure cookies and forwarded headers work properly
+  app.set('trust proxy', 1);
+
   const allowedOrigins = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
@@ -24,10 +27,27 @@ async function bootstrap() {
       if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-      // If deployed in production and client domain is allowed
       return callback(null, true);
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-refresh-token',
+      'x-reset-pass-token',
+      'x-access-token',
+      'x-requested-with',
+      'Accept',
+      'Origin',
+    ],
+    exposedHeaders: [
+      'Set-Cookie',
+      'Authorization',
+      'x-refresh-token',
+      'x-reset-pass-token',
+      'x-access-token',
+    ],
   });
 
   app.useBodyParser('json', { limit: '10mb' });

@@ -27,26 +27,14 @@ async function attemptTokenRefresh(): Promise<boolean> {
 
   refreshPromise = (async () => {
     try {
-      const storedRefreshToken =
-        typeof window !== "undefined"
-          ? localStorage.getItem("quizzcraft_refresh_token")
-          : null;
-
       const refreshUrl = `${API_BASE_URL}/auth/refresh`;
       const response = await fetch(refreshUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(storedRefreshToken ? { "x-refresh-token": storedRefreshToken } : {}),
-        },
         credentials: "include",
-        body: storedRefreshToken ? JSON.stringify({ refreshToken: storedRefreshToken }) : undefined,
       });
 
       if (!response.ok) {
         if (typeof window !== "undefined") {
-          localStorage.removeItem("quizzcraft_access_token");
-          localStorage.removeItem("quizzcraft_refresh_token");
           window.dispatchEvent(new CustomEvent("auth:session-expired"));
         }
         return false;
@@ -54,12 +42,6 @@ async function attemptTokenRefresh(): Promise<boolean> {
 
       const payload = await response.json();
       if (typeof window !== "undefined" && payload?.data) {
-        if (payload.data.accessToken) {
-          localStorage.setItem("quizzcraft_access_token", payload.data.accessToken);
-        }
-        if (payload.data.refreshToken) {
-          localStorage.setItem("quizzcraft_refresh_token", payload.data.refreshToken);
-        }
         window.dispatchEvent(new CustomEvent("auth:token-refreshed", { detail: payload.data }));
       }
       return true;
@@ -94,17 +76,12 @@ export async function apiClient<T>(
   }
 
   const isFormData = customConfig.body instanceof FormData;
-  const storedAccessToken =
-    typeof window !== "undefined"
-      ? localStorage.getItem("quizzcraft_access_token")
-      : null;
 
   const config: RequestInit = {
     ...customConfig,
-    credentials: "include", // Required for backend's cookie-based JWT authentication
+    credentials: "include", // Cookie-based authentication via Next.js proxy
     headers: {
       ...(!isFormData && { "Content-Type": "application/json" }),
-      ...(storedAccessToken ? { Authorization: `Bearer ${storedAccessToken}` } : {}),
       ...headers,
     },
   };

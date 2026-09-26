@@ -3,7 +3,9 @@
  * Mapped from NestJS Controllers in D:\Aryan\coding\projects\quizz-craft\backend
  */
 
-export const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+// When using Next.js / Vercel proxy rewrites, use relative URL ("") so the browser treats API requests as same-domain.
+// This allows cookies (accessToken, refreshToken, RESET_PASS_TOKEN) to be stored as 1st-party cookies and automatically attached by the browser.
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export const API_ROUTES = {
   // ==========================================
