@@ -53,6 +53,7 @@ export class QuizService {
 
   async generateQuiz(
     dto: generateQuizDto,
+    owner?: { ownerId?: string; ownerEmail?: string },
   ): Promise<ServiceResponse<generateQuizResponseData>> {
     // Return type remains the same
     try {
@@ -78,6 +79,8 @@ export class QuizService {
           quizId: randomUUID(),
           pin,
           title: generatedQuiz.quiz.title,
+          ownerId: owner?.ownerId,
+          ownerEmail: owner?.ownerEmail,
           immediateResult: true,
           questime: 60,
           dynamicShuffle: true,

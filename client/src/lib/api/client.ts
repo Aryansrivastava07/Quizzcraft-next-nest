@@ -17,11 +17,67 @@ interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
 }
 
+let isRefreshing = false;
+let refreshPromise: Promise<boolean> | null = null;
+
+async function attemptTokenRefresh(): Promise<boolean> {
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  refreshPromise = (async () => {
+    try {
+      const storedRefreshToken =
+        typeof window !== "undefined"
+          ? localStorage.getItem("quizzcraft_refresh_token")
+          : null;
+
+      const refreshUrl = `${API_BASE_URL}/auth/refresh`;
+      const response = await fetch(refreshUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(storedRefreshToken ? { "x-refresh-token": storedRefreshToken } : {}),
+        },
+        credentials: "include",
+        body: storedRefreshToken ? JSON.stringify({ refreshToken: storedRefreshToken }) : undefined,
+      });
+
+      if (!response.ok) {
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("quizzcraft_access_token");
+          localStorage.removeItem("quizzcraft_refresh_token");
+          window.dispatchEvent(new CustomEvent("auth:session-expired"));
+        }
+        return false;
+      }
+
+      const payload = await response.json();
+      if (typeof window !== "undefined" && payload?.data) {
+        if (payload.data.accessToken) {
+          localStorage.setItem("quizzcraft_access_token", payload.data.accessToken);
+        }
+        if (payload.data.refreshToken) {
+          localStorage.setItem("quizzcraft_refresh_token", payload.data.refreshToken);
+        }
+        window.dispatchEvent(new CustomEvent("auth:token-refreshed", { detail: payload.data }));
+      }
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
 export async function apiClient<T>(
   endpoint: string,
-  options: RequestOptions = {}
+  options: RequestOptions & { _isRetry?: boolean } = {}
 ): Promise<BackendResponse<T>> {
-  const { params, headers, ...customConfig } = options;
+  const { params, headers, _isRetry, ...customConfig } = options;
 
   let url = endpoint;
   if (params) {
@@ -38,18 +94,47 @@ export async function apiClient<T>(
   }
 
   const isFormData = customConfig.body instanceof FormData;
+  const storedAccessToken =
+    typeof window !== "undefined"
+      ? localStorage.getItem("quizzcraft_access_token")
+      : null;
 
   const config: RequestInit = {
     ...customConfig,
     credentials: "include", // Required for backend's cookie-based JWT authentication
     headers: {
       ...(!isFormData && { "Content-Type": "application/json" }),
+      ...(storedAccessToken ? { Authorization: `Bearer ${storedAccessToken}` } : {}),
       ...headers,
     },
   };
 
   try {
     const response = await fetch(url, config);
+
+    // Auto-refresh token if 401 Unauthorized occurs on protected routes
+    if (response.status === 401 && !_isRetry) {
+      const isAuthExempt =
+        url.includes("/auth/refresh") ||
+        url.includes("/auth/login") ||
+        url.includes("/auth/register") ||
+        url.includes("/auth/verify-register-otp") ||
+        url.includes("/auth/send-password-reset-mail") ||
+        url.includes("/auth/verify-password-reset-otp") ||
+        url.includes("/auth/reset-password");
+
+      if (!isAuthExempt) {
+        const refreshed = await attemptTokenRefresh();
+        if (refreshed) {
+          // Re-try the original request with the fresh token
+          return apiClient<T>(endpoint, {
+            ...options,
+            _isRetry: true,
+          });
+        }
+      }
+    }
+
     let payload: any;
     try {
       payload = await response.json();

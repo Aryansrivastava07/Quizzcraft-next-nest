@@ -25,10 +25,11 @@ export class AuthController {
   constructor(private readonly authService: AuthService) { }
 
   private getCookieOptions(maxAge: number) {
+    const isProd = process.env.NODE_ENV === 'production';
     return {
       httpOnly: true,
-      secure: true,
-      sameSite: 'strict' as const,
+      secure: isProd,
+      sameSite: (isProd ? 'none' : 'lax') as 'none' | 'lax',
       maxAge,
     };
   }
@@ -64,15 +65,19 @@ export class AuthController {
 
     return {
       message: result.message,
-      data: res
-    }
+      data: {
+        ...res,
+        accessToken,
+        refreshToken,
+      }
+    };
   }
 
   @UseGuards(JwtAuthGuard)
   @HttpCode(200)
   @Post('logout')
   async logout(@Req() req, @Res({ passthrough: true }) response: Response) {
-    const refreshToken = req.cookies.refreshToken;
+    const refreshToken = req.cookies?.refreshToken || req.headers?.['x-refresh-token'];
     const userId = req.user.userId;
 
     const res = await this.authService.logout({ userId, refreshToken });
@@ -84,11 +89,17 @@ export class AuthController {
     return res;
   }
 
-
   @HttpCode(200)
   @Post('refresh')
-  async Refresh(@Req() req, @Res({ passthrough: true }) response: Response) {
-    const refreshToken = req.cookies.refreshToken;
+  async Refresh(
+    @Req() req,
+    @Res({ passthrough: true }) response: Response,
+    @Body() body?: { refreshToken?: string },
+  ) {
+    const refreshToken = req.cookies?.refreshToken || body?.refreshToken || req.headers?.['x-refresh-token'];
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token not provided');
+    }
     const result = await this.authService.refresh({ refreshToken });
     const { accessToken, refreshToken: newRefreshToken, ...res } = result.data;
 
@@ -97,7 +108,11 @@ export class AuthController {
 
     return {
       message: result.message,
-      data: res
+      data: {
+        ...res,
+        accessToken,
+        refreshToken: newRefreshToken,
+      }
     };
   }
 
@@ -118,14 +133,24 @@ export class AuthController {
 
     return {
       message: result.message,
-      data: res
-    }
+      data: {
+        ...res,
+        accessToken,
+        refreshToken,
+      }
+    };
   }
 
   @HttpCode(200)
   @Post('send-password-reset-mail')
   sendPasswordResetMail(@Body() dto: SendPasswordResetMailAuthDto) {
     return this.authService.sendPasswordResetMail(dto);
+  }
+
+  @HttpCode(200)
+  @Post('resend-password-reset-otp')
+  resendPasswordResetOTP(@Body() dto: ResendOTP) {
+    return this.authService.ResendPasswordResetOTP(dto);
   }
 
   @HttpCode(200)
@@ -138,8 +163,11 @@ export class AuthController {
 
     return {
       message: result.message,
-      data: res
-    }
+      data: {
+        ...res,
+        RESET_PASS_TOKEN,
+      }
+    };
   }
 
   @UseGuards(ResetPassGuard)

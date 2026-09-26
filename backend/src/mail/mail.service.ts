@@ -17,6 +17,7 @@ export class MailService {
     OTP: string,
   ) {
     const verificationMailConfig = verificationMail;
+    console.log(`[Mail] Verification OTP dispatched to ${email}`);
     return this.resend.emails.send({
       from: verificationMailConfig.from,
       to: email,
@@ -30,6 +31,7 @@ export class MailService {
     OTP: string,
   ) {
     const passwordResetMailConfig = passwordResetMail;
+    console.log(`[Mail] Password reset email dispatched to ${email}`);
     return this.resend.emails.send({
       from: passwordResetMailConfig.from,
       to: email,
@@ -40,6 +42,7 @@ export class MailService {
 
   async sendSupportTicketEmail(data: SupportTicketMailData) {
     const config = supportTicketMail;
+    console.log(`[Mail] Support ticket [${data.ticketId}] dispatched to ${data.email}`);
     return this.resend.emails.send({
       from: config.from,
       to: data.email,
@@ -50,6 +53,7 @@ export class MailService {
 
   async sendScheduledQuizAlertEmail(data: ScheduledQuizAlertMailData) {
     const config = scheduledQuizAlertMail;
+    console.log(`[Mail] 5-min launch alert for "${data.quizTitle}" dispatched to ${data.ownerEmail}`);
     return this.resend.emails.send({
       from: config.from,
       to: data.ownerEmail,

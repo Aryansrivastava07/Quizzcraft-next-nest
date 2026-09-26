@@ -42,6 +42,7 @@ export class QuizController {
     ]),
   )
   async generateQuiz(
+    @Request() req,
     @Body() dto: generateQuizDto,
     @UploadedFiles()
     files: {
@@ -50,7 +51,9 @@ export class QuizController {
       pdfs?: Express.Multer.File[];
     },
   ) {
-    return this.quizService.generateQuiz({ ...dto, ...files });
+    const ownerId = req.user?.userId;
+    const ownerEmail = req.user?.email;
+    return this.quizService.generateQuiz({ ...dto, ...files }, { ownerId, ownerEmail });
   }
 
   @UseGuards(JwtAuthGuard)
