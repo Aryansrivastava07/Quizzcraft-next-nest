@@ -1,6 +1,7 @@
 import {
   IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsString,
   IsStrongPassword,
   Matches,
@@ -83,4 +84,12 @@ export class ResetPasswordAuthDto {
       @IsNotEmpty()
       @IsStrongPassword()
       password!: string;
+
+      @IsOptional()
+      @IsString()
+      resetToken?: string;
+
+      @IsOptional()
+      @IsString()
+      RESET_PASS_TOKEN?: string;
 }

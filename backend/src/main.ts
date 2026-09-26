@@ -7,6 +7,8 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 
 async function bootstrap() {
+  const env = process.env.NODE_ENV || 'development';
+  console.log(`[Server] Bootstrapping QuizzCraft Backend in ${env} mode...`);
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   const allowedOrigins = [
@@ -40,7 +42,7 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 5000;
   await app.listen(port, '0.0.0.0');
-  console.log(`[Bootstrap] QuizzCraft Backend listening on port ${port} (0.0.0.0)`);
+  console.log(`[Server] QuizzCraft Backend online and listening at http://0.0.0.0:${port}`);
 }
 
 bootstrap().catch((err) => {

@@ -5,12 +5,11 @@ import { ConfigModule } from '@nestjs/config';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
 import { MailModule } from './mail/mail.module';
 import { ProfileModule } from './profile/profile.module';
-import { CacheModule } from '@nestjs/cache-manager';
 import { ScheduleModule } from '@nestjs/schedule';
 import { QuizModule } from './quiz/quiz.module';
 import { AiModule } from './ai/ai.module';
 import { HealthModule } from './health/health.module';
-import KeyvRedis from '@keyv/redis';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -22,12 +21,7 @@ import KeyvRedis from '@keyv/redis';
     ScheduleModule.forRoot(),
     MailModule,
     ProfileModule,
-    CacheModule.register({
-      isGlobal: true,
-      ...(process.env.REDIS_URL
-        ? { stores: [new KeyvRedis(process.env.REDIS_URL)] }
-        : {}),
-    }),
+    RedisModule,
     QuizModule,
     AiModule,
     HealthModule,

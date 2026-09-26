@@ -267,9 +267,31 @@ export class ProfileService {
 
   async GetQuizzesForProfile(
     email: string,
+    userId?: string,
   ): Promise<ServiceResponse<{ quizzes: any[] }>> {
     try {
-      const quizzes = await this.QuizModel.find().sort({ _id: -1 }).lean();
+      const user = await this.UserModel.findOne({
+        $or: [{ email }, ...(userId ? [{ _id: userId }] : [])],
+      }).lean();
+
+      const userEmails = [
+        email,
+        ...(Array.isArray(user?.emails) ? user.emails : []),
+      ].filter(Boolean);
+
+      const conditions: any[] = [
+        { ownerEmail: { $in: userEmails } },
+      ];
+      if (userId) {
+        conditions.push({ ownerId: String(userId) });
+      }
+
+      const quizzes = await this.QuizModel.find({
+        $or: conditions,
+      })
+        .sort({ _id: -1 })
+        .lean();
+
       return {
         message: 'Quizzes found',
         data: { quizzes },

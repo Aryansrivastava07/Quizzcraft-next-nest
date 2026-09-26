@@ -4,10 +4,10 @@ import { AuthController } from './auth.controller';
 import { AuthProviders } from './auth.providers';
 import { DbModule } from '../db/db.module';
 import { MailModule } from '../mail/mail.module';
-import { CacheModule } from '@nestjs/cache-manager';
+
 @Module({
-  imports: [DbModule,MailModule,CacheModule.register(),],
+  imports: [DbModule, MailModule],
   controllers: [AuthController],
-  providers: [AuthService, ...AuthProviders,],
+  providers: [AuthService, ...AuthProviders],
 })
 export class AuthModule {}

@@ -65,8 +65,12 @@ export default function Navbar({ activeChapter }: NavbarProps) {
   ];
 
   return (
-    <header className="fixed top-3 sm:top-5 left-1/2 -translate-x-1/2 w-[calc(100%-1.5rem)] sm:w-[calc(100%-2.5rem)] max-w-max-width-canvas z-50 transition-all duration-300">
-      <nav className="glass-kage rounded-full border border-white/10 px-4 sm:px-6 py-2.5 flex items-center justify-between shadow-2xl backdrop-blur-xl">
+    <>
+      {/* Top Viewport Scroll Blur: Blurs content scrolling through the gap above the floating pill navbar */}
+      <div className="top-nav-blur-veil" aria-hidden="true" />
+
+      <header className="fixed top-3 sm:top-5 left-0 right-0 mx-auto w-[calc(100%-1.5rem)] sm:w-[calc(100%-2.5rem)] max-w-max-width-canvas z-50 transition-all duration-300">
+        <nav className="navbar-frosted-glass rounded-full px-4 sm:px-6 h-12 sm:h-14 flex items-center justify-between relative">
         {/* Left: Company Logo */}
         <div className="flex items-center">
           <Link href="/" className="flex items-center gap-2.5 group">
@@ -111,7 +115,7 @@ export default function Navbar({ activeChapter }: NavbarProps) {
         <div className="flex items-center gap-2">
           {isLoggedIn ? (
             /* Circular Profile Tab */
-            <div className="relative" ref={profileMenuRef}>
+            <div className="relative flex items-center" ref={profileMenuRef}>
               <button
                 type="button"
                 onClick={() => setProfileMenuOpen(!profileMenuOpen)}
@@ -135,7 +139,7 @@ export default function Navbar({ activeChapter }: NavbarProps) {
 
               {/* Profile Dropdown Popover */}
               {profileMenuOpen && (
-                <div className="absolute right-0 mt-3 w-64 rounded-2xl glass-kage border border-white/10 p-3 shadow-2xl backdrop-blur-2xl animate-fadeIn z-50 text-xs">
+                <div className="!absolute right-0 top-full mt-2 w-64 rounded-2xl dropdown-frosted-glass p-3 animate-fadeIn z-50 text-xs">
                   {/* User Header */}
                   <div className="flex items-center gap-3 p-2 pb-3 border-b border-white/10">
                     <div className="w-10 h-10 rounded-full overflow-hidden ring-1 ring-primary/40 shrink-0 flex items-center justify-center bg-primary-container/30">
@@ -177,11 +181,21 @@ export default function Navbar({ activeChapter }: NavbarProps) {
                       <span>Profile &amp; Settings</span>
                     </Link>
                     <Link
-                      href="/profile?tab=my-quizzes"
+                      href="/profile?tab=security"
                       onClick={() => setProfileMenuOpen(false)}
                       className="flex items-center gap-2 px-3 py-2 rounded-xl text-on-surface hover:text-white hover:bg-white/10 transition-colors"
                     >
                       <span className="material-symbols-outlined text-base text-primary">
+                        lock_reset
+                      </span>
+                      <span>Reset Password</span>
+                    </Link>
+                    <Link
+                      href="/profile?tab=my-quizzes"
+                      onClick={() => setProfileMenuOpen(false)}
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl text-on-surface hover:text-white hover:bg-white/10 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-base text-tertiary">
                         folder_shared
                       </span>
                       <span>My Quizzes</span>
@@ -287,5 +301,6 @@ export default function Navbar({ activeChapter }: NavbarProps) {
         </div>
       )}
     </header>
+    </>
   );
 }

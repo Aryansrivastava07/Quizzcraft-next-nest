@@ -68,8 +68,8 @@ export class ProfileController {
   @HttpCode(200)
   @Get('quizzes')
   async GetQuizzesForProfile(@Req() req) {
-    const { email } = req.user;
-    return this.profileService.GetQuizzesForProfile(email);
+    const { email, userId } = req.user;
+    return this.profileService.GetQuizzesForProfile(email, userId);
   }
 
   @HttpCode(200)

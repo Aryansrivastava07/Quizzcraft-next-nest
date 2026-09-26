@@ -20,6 +20,7 @@ export const API_ROUTES = {
     resendRegisterOTP: `${API_BASE_URL}/auth/resend-register-otp`,  // POST
     verifyRegisterOTP: `${API_BASE_URL}/auth/verify-register-otp`,  // POST (sets cookies on success)
     sendPasswordResetMail: `${API_BASE_URL}/auth/send-password-reset-mail`, // POST
+    resendPasswordResetOTP: `${API_BASE_URL}/auth/resend-password-reset-otp`, // POST
     verifyPasswordResetOTP: `${API_BASE_URL}/auth/verify-password-reset-otp`, // POST (sets RESET_PASS_TOKEN cookie)
     resetPassword: `${API_BASE_URL}/auth/reset-password`,          // POST (ResetPassGuard)
     checkUsername: (username: string) =>

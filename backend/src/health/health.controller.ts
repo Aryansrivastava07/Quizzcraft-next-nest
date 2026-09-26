@@ -6,7 +6,7 @@ export class HealthController {
   constructor(private readonly healthService: HealthService) {}
 
   /**
-   * Primary health check endpoint: GET /health
+   * Root health check endpoint: GET /health
    */
   @Get('health')
   @HttpCode(200)

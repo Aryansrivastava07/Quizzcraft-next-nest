@@ -11,6 +11,7 @@ interface AuthContextType {
   error: string | null;
   login: (dto: LoginAuthDto) => Promise<void>;
   register: (dto: RegisterAuthDto) => Promise<{ message: string }>;
+  verifyRegisterOTP: (dto: { email: string; OTP: string }) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   clearError: () => void;
@@ -48,9 +49,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Initial check on mount
+  // Initial check on mount + listen to token refresh / expiry events
   useEffect(() => {
     refreshUser();
+
+    const handleSessionExpired = () => {
+      setUser(null);
+    };
+
+    const handleTokenRefreshed = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail?.user) {
+        setUser(customEvent.detail.user);
+      } else {
+        // Silently reload user profile with new access token
+        authService.getMe().then((res) => {
+          if (res?.data?.user) {
+            setUser(res.data.user);
+          }
+        }).catch(() => {});
+      }
+    };
+
+    window.addEventListener("auth:session-expired", handleSessionExpired);
+    window.addEventListener("auth:token-refreshed", handleTokenRefreshed);
+
+    return () => {
+      window.removeEventListener("auth:session-expired", handleSessionExpired);
+      window.removeEventListener("auth:token-refreshed", handleTokenRefreshed);
+    };
   }, [refreshUser]);
 
   const login = async (dto: LoginAuthDto) => {
@@ -85,6 +112,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const verifyRegisterOTP = async (dto: { email: string; OTP: string }) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await authService.verifyRegisterOTP(dto);
+      if (response?.data?.user) {
+        setUser(response.data.user);
+      } else {
+        await refreshUser();
+      }
+    } catch (err: any) {
+      const formatted = formatApiError(err);
+      setError(formatted);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const logout = async () => {
     setIsLoading(true);
     try {
@@ -105,6 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         error,
         login,
         register,
+        verifyRegisterOTP,
         logout,
         refreshUser,
         clearError,

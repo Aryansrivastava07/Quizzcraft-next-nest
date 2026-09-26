@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -36,15 +37,14 @@ import {
   toMeDto,
 } from './mapper/auth-response.mapper';
 import { TokenPayload } from './interfaces/TokenPayload.interface';
+import { RedisService } from '../redis/redis.service';
 import { MailService } from '../mail/mail.service';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import type { Cache } from 'cache-manager';
 
 @Injectable()
 export class AuthService {
   constructor(
     @Inject('USER_MODEL') private UserModel: Model<User>,
-    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly redisService: RedisService,
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
   ) {}
@@ -156,7 +156,7 @@ export class AuthService {
       });
       const hashedOTP = await hashPassword(OTP, this.getSalt());
       const cacheKey = `reg-otp-${createdUser.email}`;
-      await this.cacheManager.set(cacheKey, hashedOTP, 1000 * 60 * 2);
+      await this.redisService.set(cacheKey, hashedOTP, 1000 * 60 * 2);
 
       await createdUser.save();
       await this.mailService.sendVerificationEmail(dto.email, OTP);
@@ -236,15 +236,16 @@ export class AuthService {
       const OTP = Math.floor(100000 + Math.random() * 900000).toString();
       const hashedOTP = await hashPassword(OTP, this.getSalt());
       const cacheKey = `reg-otp-${email}`;
-      await this.cacheManager.set(cacheKey, hashedOTP, 1000 * 60 * 2);
+      await this.redisService.set(cacheKey, hashedOTP, 1000 * 60 * 2);
       await this.mailService.sendVerificationEmail(email, OTP);
       return {
         message: 'otp sent successfully',
         data: true,
       };
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
-        error.messsage || 'Unexpected error occured',
+        error.message || 'Unexpected error occurred',
       );
     }
   }
@@ -292,7 +293,7 @@ export class AuthService {
     const { email, OTP } = dto;
     try {
       const cacheKey = `reg-otp-${email}`;
-      const hashedOTP = await this.cacheManager.get(cacheKey);
+      const hashedOTP = await this.redisService.get(cacheKey);
       if (!hashedOTP)
         throw new UnauthorizedException('No OTP found for this user');
       const user = await this.UserModel.findOne({ email });
@@ -316,6 +317,7 @@ export class AuthService {
         },
       };
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         error.message || 'An unexpected error occurred',
       );
@@ -333,7 +335,7 @@ export class AuthService {
     const OTP = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedOTP = await hashPassword(OTP, this.getSalt());
     const cacheKey = `pas-otp-${email}`;
-    await this.cacheManager.set(cacheKey, hashedOTP, 1000 * 60 * 2);
+    await this.redisService.set(cacheKey, hashedOTP, 1000 * 60 * 2);
     this.mailService.sendPasswordResetEmail(email, OTP);
     return {
       message: 'otp sent successfully',
@@ -351,15 +353,16 @@ export class AuthService {
       const OTP = Math.floor(100000 + Math.random() * 900000).toString();
       const hashedOTP = await hashPassword(OTP, this.getSalt());
       const cacheKey = `pas-otp-${email}`;
-      await this.cacheManager.set(cacheKey, hashedOTP, 1000 * 60 * 2);
+      await this.redisService.set(cacheKey, hashedOTP, 1000 * 60 * 2);
       await this.mailService.sendPasswordResetEmail(email, OTP);
       return {
         message: 'otp sent successfully',
         data: true,
       };
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
-        error.messsage || 'Unexpected error occured',
+        error.message || 'Unexpected error occurred',
       );
     }
   }
@@ -370,7 +373,7 @@ export class AuthService {
     const { email, OTP } = dto;
     try {
       const cacheKey = `pas-otp-${email}`;
-      const hashedOTP = await this.cacheManager.get(cacheKey);
+      const hashedOTP = await this.redisService.get(cacheKey);
       if (!hashedOTP)
         throw new UnauthorizedException('No OTP found for this user ');
       const user = await this.UserModel.findOne({ email });
@@ -391,6 +394,7 @@ export class AuthService {
         },
       };
     } catch (error: any) {
+      if (error instanceof HttpException) throw error;
       throw new InternalServerErrorException(
         error.message || 'An unexpected error occurred',
       );
