@@ -24,9 +24,9 @@ import KeyvRedis from '@keyv/redis';
     ProfileModule,
     CacheModule.register({
       isGlobal: true,
-      stores: [
-        new KeyvRedis('redis://localhost:6379'),
-      ],
+      ...(process.env.REDIS_URL
+        ? { stores: [new KeyvRedis(process.env.REDIS_URL)] }
+        : {}),
     }),
     QuizModule,
     AiModule,

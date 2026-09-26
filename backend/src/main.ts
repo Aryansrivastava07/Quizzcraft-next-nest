@@ -1,19 +1,35 @@
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { validationPipe } from './common/pipes/validation.pipe';
 import cookieParser from 'cookie-parser';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
-import { json, urlencoded } from 'express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    ...(process.env.CLIENT_URL ? [process.env.CLIENT_URL] : []),
+    ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+  ];
+
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like curl, postman, server-to-server health pings)
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      // If deployed in production and client domain is allowed
+      return callback(null, true);
+    },
     credentials: true,
   });
-  app.use(json({ limit: '10mb' }));
-  app.use(urlencoded({ extended: true, limit: '10mb' }));
+
+  app.useBodyParser('json', { limit: '10mb' });
+  app.useBodyParser('urlencoded', { extended: true, limit: '10mb' });
   app.use(cookieParser());
 
   app.useGlobalPipes(new validationPipe());
@@ -22,6 +38,12 @@ async function bootstrap() {
 
   app.useGlobalInterceptors(new ResponseInterceptor());
 
-  await app.listen(process.env.PORT ?? 5000);
+  const port = process.env.PORT ?? 5000;
+  await app.listen(port, '0.0.0.0');
+  console.log(`[Bootstrap] QuizzCraft Backend listening on port ${port} (0.0.0.0)`);
 }
-bootstrap();
+
+bootstrap().catch((err) => {
+  console.error('[Fatal Bootstrap Error] Failed to start backend application:', err);
+  process.exit(1);
+});
