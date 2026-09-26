@@ -1,0 +1,26 @@
+name: Render Backend Keep-Alive
+
+on:
+  schedule:
+    # Runs every 14 minutes as an external safety net to ensure Render never spins down
+    - cron: '*/14 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions dashboard
+
+jobs:
+  ping-health:
+    name: Ping Render Health Check Route
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send HTTP GET to Backend /health
+        env:
+          BACKEND_URL: ${{ secrets.BACKEND_URL || 'https://quizzcraft-backend.onrender.com' }}
+        run: |
+          TARGET="${BACKEND_URL%/}/health"
+          echo "Pinging health check endpoint: $TARGET"
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 35 "$TARGET" || echo "000")
+          echo "Response HTTP Status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "✅ Render backend is active and healthy!"
+          else
+            echo "⚠️ Received HTTP Status: $HTTP_STATUS (Service may be spinning up or URL needs configuration)"
+          fi
