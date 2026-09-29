@@ -363,8 +363,9 @@ function ProfileContent() {
           title: q.title || "AI Generated Quiz",
           questionsCount: q.questions?.length || 0,
           playsCount: 0,
-          avgScore: "Active",
-          status: "ACTIVE",
+          avgScore: q.isDeployed ? "Active" : "Draft",
+          status: q.isDeployed ? (q.status || "DEPLOYED") : "DRAFT",
+          isDeployed: Boolean(q.isDeployed),
           topic: q.questions?.[0]?.question ? "AI & Science" : "General Study",
           date: q.createdAt
             ? new Date(q.createdAt).toLocaleDateString("en-US", {
@@ -1952,9 +1953,11 @@ function ProfileContent() {
                               </span>
                               <span
                                 className={`text-[10px] font-label-code px-2 py-0.5 rounded font-bold uppercase ${
-                                  quiz.status === "ACTIVE"
+                                  quiz.status === "DRAFT"
+                                    ? "bg-slate-500/20 text-slate-300 border border-slate-500/30"
+                                    : quiz.status === "LIVE"
                                     ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                                    : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                    : "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
                                 }`}
                               >
                                 {quiz.status}
@@ -1987,6 +1990,17 @@ function ProfileContent() {
 
                           {/* Action Buttons */}
                           <div className="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-outline-variant/20 font-headline-sm text-xs">
+                            <Link
+                              href={`/quiz/review/${quiz.id}`}
+                              className="px-3 py-1.5 rounded-xl bg-surface-container hover:bg-surface-bright border border-outline-variant/30 text-on-surface hover:text-white flex items-center gap-1 transition-all"
+                              title="View Leaderboard & Review"
+                            >
+                              <span className="material-symbols-outlined text-sm text-tertiary">
+                                leaderboard
+                              </span>
+                              <span>Review</span>
+                            </Link>
+
                             <Link
                               href={`/editor?quizId=${quiz.id}`}
                               className="px-3 py-1.5 rounded-xl bg-surface-container hover:bg-surface-bright border border-outline-variant/30 text-on-surface hover:text-white flex items-center gap-1 transition-all"
@@ -2169,15 +2183,27 @@ function ProfileContent() {
                           {/* Action Buttons */}
                           <div className="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-outline-variant/20">
                             {attempt.quizId && (
-                              <Link
-                                href={`/quiz?quizId=${attempt.quizId}`}
-                                className="px-3.5 py-1.5 rounded-xl bg-surface-container hover:bg-surface-bright border border-outline-variant/40 text-on-surface hover:text-white font-headline-sm text-xs flex items-center gap-1.5 transition-all"
-                              >
-                                <span className="material-symbols-outlined text-sm text-tertiary">
-                                  replay
-                                </span>
-                                <span>Retry</span>
-                              </Link>
+                              <>
+                                <Link
+                                  href={`/quiz/review/${attempt.quizId}`}
+                                  className="px-3.5 py-1.5 rounded-xl bg-surface-container/60 hover:bg-surface-bright border border-outline-variant/40 text-on-surface hover:text-white font-headline-sm text-xs flex items-center gap-1.5 transition-all"
+                                >
+                                  <span className="material-symbols-outlined text-sm text-tertiary">
+                                    leaderboard
+                                  </span>
+                                  <span>Leaderboard</span>
+                                </Link>
+
+                                <Link
+                                  href={`/quiz?quizId=${attempt.quizId}`}
+                                  className="px-3.5 py-1.5 rounded-xl bg-surface-container hover:bg-surface-bright border border-outline-variant/40 text-on-surface hover:text-white font-headline-sm text-xs flex items-center gap-1.5 transition-all"
+                                >
+                                  <span className="material-symbols-outlined text-sm text-primary">
+                                    replay
+                                  </span>
+                                  <span>Retry</span>
+                                </Link>
+                              </>
                             )}
                           </div>
                         </div>

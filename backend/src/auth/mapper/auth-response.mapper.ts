@@ -8,12 +8,18 @@ export const toLoginDto = (user: User): LoginAuthResponseDto => ({
     verified: user.verified,
     profilePicture: user.profilePicture,
     xp: user.xp || 0,
+    fullName: user.fullName || '',
+    institution: user.institution || '',
+    phoneNumber: user.phoneNumber || (user.mobileNo ? String(user.mobileNo) : ''),
 });
 
 export const toRegisterDto = (user: User): RegisterAuthResponseDto => ({
     username: user.username,
     email: user.email,
     verified: user.verified,
+    fullName: user.fullName || '',
+    institution: user.institution || '',
+    phoneNumber: user.phoneNumber || (user.mobileNo ? String(user.mobileNo) : ''),
 });
 
 export const toMeDto = (user: User): MeAuthResponseDto => ({
@@ -23,4 +29,7 @@ export const toMeDto = (user: User): MeAuthResponseDto => ({
     verified: user.verified,
     profilePicture: user.profilePicture,
     xp: user.xp || 0,
-})
+    fullName: user.fullName || '',
+    institution: user.institution || '',
+    phoneNumber: user.phoneNumber || (user.mobileNo ? String(user.mobileNo) : ''),
+});

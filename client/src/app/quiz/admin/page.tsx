@@ -168,7 +168,22 @@ function QuizAdminContent() {
             <div className="absolute -right-20 -top-20 w-80 h-80 rounded-full bg-primary/20 blur-[90px] pointer-events-none" />
 
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
-              <div className="space-y-2">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+                {quizData?.coverImage && (
+                  <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border border-primary/30 shrink-0 shadow-lg bg-surface-container-highest group">
+                    <img
+                      src={quizData.coverImage}
+                      alt={quizData?.title || "Arena cover"}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/stitch/screen-6-cosmic-portal-3d.png';
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-surface-container-lowest/60 via-transparent to-transparent pointer-events-none" />
+                  </div>
+                )}
+
+                <div className="space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <span
                     className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-label-code text-xs font-bold uppercase tracking-wider ${
@@ -223,6 +238,7 @@ function QuizAdminContent() {
                     <span>{timeRemaining}</span>
                   </div>
                 )}
+              </div>
               </div>
 
               {/* Host PIN & Quick Action Cluster */}

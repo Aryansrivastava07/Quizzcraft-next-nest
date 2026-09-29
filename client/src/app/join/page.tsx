@@ -817,11 +817,20 @@ function JoinQuizContent() {
                 </button>
               </form>
 
-              <div className="mt-6 pt-4 border-t border-outline-variant/20 flex items-center justify-between text-xs text-on-surface-variant">
-                <span>Want to create a quiz instead?</span>
-                <Link href="/create" className="text-tertiary hover:underline font-medium">
-                  Launch Studio →
-                </Link>
+              <div className="mt-6 pt-4 border-t border-outline-variant/20 flex flex-col gap-2.5 text-xs text-on-surface-variant">
+                <div className="flex items-center justify-between">
+                  <span>Looking for open battles?</span>
+                  <Link href="/quizzes" className="text-tertiary hover:underline font-medium flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">explore</span>
+                    Browse Public Arenas →
+                  </Link>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Want to create a quiz instead?</span>
+                  <Link href="/create" className="text-on-surface hover:text-white transition-colors font-medium">
+                    Launch Studio →
+                  </Link>
+                </div>
               </div>
             </div>
           )}

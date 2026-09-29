@@ -68,6 +68,10 @@ export const API_ROUTES = {
     waitlist: (quizId: string) => `${API_BASE_URL}/api/quiz/${quizId}/waitlist`,
     // POST: Conclude/close live quiz session
     close: (quizId: string) => `${API_BASE_URL}/api/quiz/${quizId}/close`,
+    // GET: Explore deployed public quizzes
+    public: (params?: string) => `${API_BASE_URL}/api/quiz/public${params ? `?${params}` : ''}`,
+    // GET: Quiz review, analytics & leaderboard (no questions shown)
+    review: (quizId: string) => `${API_BASE_URL}/api/quiz/${quizId}/review`,
   },
 
   // ==========================================

@@ -605,6 +605,13 @@ function QuizResultsContent() {
       <footer className="w-full bg-surface-container-lowest/80 backdrop-blur-md border-t border-outline-variant/20 py-6 px-6 relative z-10 text-xs font-label-code text-on-surface-variant">
         <div className="max-w-max-width-canvas mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded overflow-hidden border border-primary/30 flex items-center justify-center bg-surface-container-high shrink-0">
+              <img
+                src="/images/logo-icon.png"
+                alt="QuizzCraft Logo"
+                className="w-full h-full object-cover"
+              />
+            </div>
             <span className="text-primary font-bold">QuizzCraft.app</span>
             <span>© 2026 QuizzCraft</span>
           </div>

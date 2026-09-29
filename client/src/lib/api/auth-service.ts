@@ -22,6 +22,20 @@ export const authService = {
   },
 
   /**
+   * Check username availability
+   */
+  async checkUsername(username: string) {
+    return apiClient<{ available: boolean; valid: boolean; message: string }>(
+      typeof API_ROUTES.auth.checkUsername === "function"
+        ? API_ROUTES.auth.checkUsername(username)
+        : `/auth/check-username?username=${encodeURIComponent(username)}`,
+      {
+        method: "GET",
+      }
+    );
+  },
+
+  /**
    * Register a new user account with strong password
    * Triggers verification OTP email
    */
@@ -37,67 +51,30 @@ export const authService = {
    * Sets httpOnly accessToken and refreshToken cookies
    */
   async login(data: LoginAuthDto) {
-    const res = await apiClient<{ user: UserMe; accessToken?: string; refreshToken?: string }>(API_ROUTES.auth.login, {
+    return apiClient<{ user: UserMe }>(API_ROUTES.auth.login, {
       method: "POST",
       body: JSON.stringify(data),
     });
-
-    if (typeof window !== "undefined" && res.data) {
-      if (res.data.accessToken) {
-        localStorage.setItem("quizzcraft_access_token", res.data.accessToken);
-      }
-      if (res.data.refreshToken) {
-        localStorage.setItem("quizzcraft_refresh_token", res.data.refreshToken);
-      }
-    }
-
-    return res;
   },
 
   /**
    * Logout user session and clear cookies
+   * Backend reads refreshToken directly from cookies and clears tokens
    */
   async logout() {
-    const refreshToken =
-      typeof window !== "undefined"
-        ? localStorage.getItem("quizzcraft_refresh_token")
-        : null;
-
-    try {
-      return await apiClient<boolean>(API_ROUTES.auth.logout, {
-        method: "POST",
-        headers: {
-          ...(refreshToken ? { "x-refresh-token": refreshToken } : {}),
-        },
-        body: refreshToken ? JSON.stringify({ refreshToken }) : undefined,
-      });
-    } finally {
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("quizzcraft_access_token");
-        localStorage.removeItem("quizzcraft_refresh_token");
-        localStorage.removeItem("quizzcraft_reset_token");
-      }
-    }
+    return apiClient<boolean>(API_ROUTES.auth.logout, {
+      method: "POST",
+    });
   },
 
   /**
    * Refresh access and refresh tokens using cookie
+   * Backend reads refreshToken directly from cookies
    */
   async refresh() {
-    const res = await apiClient<{ user: UserMe; accessToken?: string; refreshToken?: string }>(API_ROUTES.auth.refresh, {
+    return apiClient<{ user: UserMe }>(API_ROUTES.auth.refresh, {
       method: "POST",
     });
-
-    if (typeof window !== "undefined" && res.data) {
-      if (res.data.accessToken) {
-        localStorage.setItem("quizzcraft_access_token", res.data.accessToken);
-      }
-      if (res.data.refreshToken) {
-        localStorage.setItem("quizzcraft_refresh_token", res.data.refreshToken);
-      }
-    }
-
-    return res;
   },
 
   /**
@@ -115,21 +92,10 @@ export const authService = {
    * Sets access & refresh token cookies on success
    */
   async verifyRegisterOTP(data: VerifyOTPAuthDto) {
-    const res = await apiClient<{ user: UserMe; accessToken?: string; refreshToken?: string }>(API_ROUTES.auth.verifyRegisterOTP, {
+    return apiClient<{ user: UserMe }>(API_ROUTES.auth.verifyRegisterOTP, {
       method: "POST",
       body: JSON.stringify(data),
     });
-
-    if (typeof window !== "undefined" && res.data) {
-      if (res.data.accessToken) {
-        localStorage.setItem("quizzcraft_access_token", res.data.accessToken);
-      }
-      if (res.data.refreshToken) {
-        localStorage.setItem("quizzcraft_refresh_token", res.data.refreshToken);
-      }
-    }
-
-    return res;
   },
 
   /**
@@ -154,47 +120,26 @@ export const authService = {
 
   /**
    * Verify password reset OTP code
-   * Sets short-lived RESET_PASS_TOKEN cookie
+   * Backend sets short-lived RESET_PASS_TOKEN cookie
    */
   async verifyPasswordResetOTP(data: VerifyOTPAuthDto) {
-    const res = await apiClient<{ verified: boolean; RESET_PASS_TOKEN?: string }>(API_ROUTES.auth.verifyPasswordResetOTP, {
+    return apiClient<{ verified: boolean }>(API_ROUTES.auth.verifyPasswordResetOTP, {
       method: "POST",
       body: JSON.stringify(data),
     });
-
-    if (typeof window !== "undefined" && res.data?.RESET_PASS_TOKEN) {
-      localStorage.setItem("quizzcraft_reset_token", res.data.RESET_PASS_TOKEN);
-    }
-
-    return res;
   },
 
   /**
    * Reset user password
-   * Requires RESET_PASS_TOKEN cookie or header
+   * Authenticated strictly via RESET_PASS_TOKEN cookie
    */
   async resetPassword(data: ResetPasswordAuthDto) {
-    const resetToken =
-      typeof window !== "undefined"
-        ? localStorage.getItem("quizzcraft_reset_token")
-        : null;
-
-    try {
-      return await apiClient<{ reset: boolean }>(API_ROUTES.auth.resetPassword, {
-        method: "POST",
-        headers: {
-          ...(resetToken ? { "x-reset-pass-token": resetToken } : {}),
-          ...(resetToken ? { Authorization: `Bearer ${resetToken}` } : {}),
-        },
-        body: JSON.stringify({
-          email: data.email,
-          password: data.password,
-        }),
-      });
-    } finally {
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("quizzcraft_reset_token");
-      }
-    }
+    return apiClient<{ reset: boolean }>(API_ROUTES.auth.resetPassword, {
+      method: "POST",
+      body: JSON.stringify({
+        email: data.email,
+        password: data.password,
+      }),
+    });
   },
 };

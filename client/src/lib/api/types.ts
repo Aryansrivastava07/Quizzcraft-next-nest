@@ -26,6 +26,9 @@ export interface RegisterAuthDto {
   username: string;
   email: string;
   password: string; // Requires strong password (uppercase, lowercase, number, symbol, min 8)
+  fullName?: string;
+  phoneNumber?: string;
+  institution?: string;
 }
 
 export interface LoginAuthDto {
@@ -58,6 +61,9 @@ export interface UserMe {
   username: string;
   verified: boolean;
   profilePicture?: string;
+  fullName?: string;
+  phoneNumber?: string;
+  institution?: string;
   averageScore?: number;
   quizAttempted?: number;
   xp?: number;
@@ -84,11 +90,13 @@ export interface Quiz {
   quizId: string;
   pin?: string;
   title: string;
+  coverImage?: string;
   ownerId?: string;
   ownerEmail?: string;
   accessMode?: "PUBLIC" | "PRIVATE" | "ORGANIZATION";
   organizationDomain?: string;
   deploymentType?: "LIVE" | "SCHEDULED" | "ANYTIME";
+  isDeployed?: boolean;
   status?: "DRAFT" | "SCHEDULED" | "LIVE" | "ANYTIME" | "ENDED";
   scheduledFor?: string;
   liveDurationMinutes?: number;
@@ -195,3 +203,87 @@ export interface CheckUsernameResponse {
   message: string;
   isCurrent?: boolean;
 }
+
+export interface PublicQuizItem {
+  quizId: string;
+  title: string;
+  coverImage?: string;
+  pin?: string;
+  isDeployed: boolean;
+  deploymentType?: "LIVE" | "SCHEDULED" | "ANYTIME";
+  status: "DRAFT" | "LIVE" | "SCHEDULED" | "ANYTIME" | "ENDED";
+  scheduledFor?: string;
+  liveDurationMinutes?: number;
+  liveUntil?: string;
+  questionsCount: number;
+  attemptsCount: number;
+  questime?: number;
+  createdAt?: string;
+  creator: {
+    username: string;
+    fullName: string;
+    avatar: string;
+  };
+}
+
+export interface PublicQuizzesResponse {
+  quizzes: PublicQuizItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface LeaderboardEntry {
+  sessionId: string;
+  userId: string;
+  username: string;
+  fullName: string;
+  avatar: string;
+  score: number;
+  totalQuestions: number;
+  percentage: number;
+  isActive: boolean;
+  lastUpdateAt: string;
+}
+
+export interface QuizReviewStats {
+  totalAttempts: number;
+  completedAttempts: number;
+  activeAttempts: number;
+  averageScore: number;
+  highestScore: number;
+  lowestScore: number;
+  passRate: number;
+}
+
+export interface QuizReviewData {
+  quiz: {
+    quizId: string;
+    title: string;
+    coverImage?: string;
+    pin?: string;
+    isDeployed?: boolean;
+    status?: "DRAFT" | "LIVE" | "SCHEDULED" | "ANYTIME" | "ENDED";
+    deploymentType?: "LIVE" | "SCHEDULED" | "ANYTIME";
+    accessMode?: "PUBLIC" | "PRIVATE" | "ORGANIZATION";
+    scheduledFor?: string;
+    liveDurationMinutes?: number;
+    liveUntil?: string;
+    totalQuestions: number;
+    questime?: number;
+    createdAt?: string;
+    antiCheat?: boolean;
+  };
+  owner: {
+    username: string;
+    fullName: string;
+    avatar: string;
+    isCurrentUser: boolean;
+  };
+  stats: QuizReviewStats;
+  leaderboard: LeaderboardEntry[];
+  isOwner: boolean;
+  isPublic: boolean;
+  canAttempt: boolean;
+}
+

@@ -140,16 +140,36 @@ export class AuthService {
         'Username must contain only lowercase letters and numbers (3-30 characters) with no special symbols',
       );
     }
+    const existingUsername = await this.UserModel.findOne({ username });
+    if (existingUsername) {
+      throw new ConflictException('Username is already taken');
+    }
     dto.username = username;
 
-    const hashedPassword = await hashPassword(dto.password, this.getSalt());
     const normalizedEmail = (dto.email || '').toLowerCase().trim();
+    const existingEmail = await this.UserModel.findOne({
+      $or: [{ email: normalizedEmail }, { emails: normalizedEmail }],
+    });
+    if (existingEmail) {
+      throw new ConflictException('An account with this email already exists');
+    }
     dto.email = normalizedEmail;
+
+    const hashedPassword = await hashPassword(dto.password, this.getSalt());
+
+    const rawPhone = (dto.phoneNumber || '').trim();
+    const parsedMobileNo = rawPhone
+      ? Number(rawPhone.replace(/\D/g, '')) || undefined
+      : dto.mobileNo || undefined;
 
     try {
       const OTP = Math.floor(100000 + Math.random() * 900000).toString();
       const createdUser = await this.UserModel.create({
         ...dto,
+        fullName: dto.fullName?.trim() || '',
+        institution: dto.institution?.trim() || '',
+        phoneNumber: rawPhone,
+        mobileNo: parsedMobileNo,
         email: normalizedEmail,
         emails: [normalizedEmail],
         password: hashedPassword,

@@ -12,7 +12,10 @@ import {
   Delete,
   Request,
   Query,
+  Req,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import JWT from 'jsonwebtoken';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import type {} from 'multer'; // Type-only import without runtime dependency
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -30,16 +33,26 @@ import { QuizService } from './quiz.service';
 @Controller('api/quiz')
 @UseInterceptors(LoggingInterceptor, SanitizeInterceptor)
 export class QuizController {
-  constructor(private readonly quizService: QuizService) {}
+  constructor(
+    private readonly quizService: QuizService,
+    private readonly configService: ConfigService,
+  ) {}
   @UseGuards(JwtAuthGuard)
   @HttpCode(200)
   @Post('generate')
   @UseInterceptors(
-    FileFieldsInterceptor([
-      { name: 'images', maxCount: 5 },
-      { name: 'videos', maxCount: 1 },
-      { name: 'pdfs', maxCount: 2 },
-    ]),
+    FileFieldsInterceptor(
+      [
+        { name: 'images', maxCount: 5 },
+        { name: 'videos', maxCount: 1 },
+        { name: 'pdfs', maxCount: 2 },
+      ],
+      {
+        limits: {
+          fileSize: 50 * 1024 * 1024, // 50MB per file to support PDFs, diagrams, and video
+        },
+      },
+    ),
   )
   async generateQuiz(
     @Request() req,
@@ -149,6 +162,39 @@ export class QuizController {
   }
 
   @HttpCode(200)
+  @Get('public')
+  async getPublicQuizzes(@Query() query: { search?: string; status?: string; page?: string; limit?: string }) {
+    return this.quizService.getPublicQuizzes({
+      search: query.search,
+      status: query.status,
+      page: query.page ? parseInt(query.page) : 1,
+      limit: query.limit ? parseInt(query.limit) : 24,
+    });
+  }
+
+  @HttpCode(200)
+  @Get(':quizId/review')
+  async getQuizReview(
+    @Param('quizId') quizId: string,
+    @Req() req: any,
+  ) {
+    let currentUserId: string | undefined;
+    const token = req?.cookies?.accessToken;
+    if (token) {
+      try {
+        const secretKey = this.configService.get<string>('JWT_ACCESS_SECRET');
+        if (secretKey) {
+          const payload: any = JWT.verify(token, secretKey);
+          currentUserId = payload?.userId;
+        }
+      } catch {
+        // Anonymous visitor
+      }
+    }
+    return this.quizService.getQuizReview(quizId, currentUserId);
+  }
+
+  @HttpCode(200)
   @Get(':quizId')
   async getQuiz(@Param('quizId') quizId: string) {
     return this.quizService.getQuiz(quizId);
@@ -161,6 +207,7 @@ export class QuizController {
     @Body()
     body: {
       title?: string;
+      coverImage?: string;
       questions?: any[];
       immediateResult?: boolean;
       questime?: number;

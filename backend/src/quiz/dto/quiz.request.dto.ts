@@ -1,9 +1,9 @@
 import { IsNotEmpty, IsOptional, isString, IsString } from 'class-validator';
 
 export class generateQuizDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  prompt!: string;
+  prompt?: string;
 
   @IsOptional()
   questionCount?: number | string;

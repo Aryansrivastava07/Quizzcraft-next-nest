@@ -16,12 +16,19 @@ export default function CreateFooter() {
       <div className="max-w-max-width-canvas mx-auto px-6 py-10 flex flex-col md:flex-row justify-between items-center gap-6">
         {/* Brand & Status */}
         <div className="flex flex-col items-center md:items-start gap-1">
-          <div className="text-headline-sm font-headline-sm text-primary font-bold flex items-center gap-2">
+          <Link href="/" className="text-headline-sm font-headline-sm text-primary font-bold flex items-center gap-2 group">
+            <span className="w-6 h-6 rounded-md overflow-hidden border border-primary/30 flex items-center justify-center bg-surface-container-high group-hover:border-primary transition-all shrink-0">
+              <img
+                src="/images/logo-icon.png"
+                alt="QuizzCraft Logo"
+                className="w-full h-full object-cover"
+              />
+            </span>
             <span>QuizzCraft.app</span>
             <span className="px-2 py-0.5 rounded-full bg-surface-container-high text-[11px] font-label-code text-tertiary border border-outline-variant/40">
               v2.4 Online
             </span>
-          </div>
+          </Link>
           <p className="text-on-surface-variant text-xs font-body-sm text-center md:text-left">
             © 2025 QuizzCraft.app. All rights reserved. Tactile AI engines operational.
           </p>

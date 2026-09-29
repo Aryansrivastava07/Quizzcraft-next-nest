@@ -2,8 +2,10 @@ export class RegisterAuthResponseDto {
       username!: string;
       email!: string;
       verified!: boolean;
+      fullName?: string;
+      institution?: string;
+      phoneNumber?: string;
 }
-
 
 export class LoginAuthResponseDto {
       username!: string;
@@ -12,6 +14,9 @@ export class LoginAuthResponseDto {
       verified!: boolean;
       profilePicture!: string;
       xp?: number;
+      fullName?: string;
+      institution?: string;
+      phoneNumber?: string;
 }
 
 export class MeAuthResponseDto {
@@ -21,5 +26,8 @@ export class MeAuthResponseDto {
       verified!: boolean;
       profilePicture!: string;
       xp?: number;
+      fullName?: string;
+      institution?: string;
+      phoneNumber?: string;
 }
 

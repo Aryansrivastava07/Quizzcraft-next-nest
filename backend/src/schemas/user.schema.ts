@@ -59,6 +59,9 @@ export class User {
   mobileNo!: Number;
 
   @Prop({ default: '' })
+  phoneNumber!: string;
+
+  @Prop({ default: '' })
   address!: string;
 
   @Prop({ default: null })

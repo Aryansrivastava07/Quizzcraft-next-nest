@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
 import { verificationMail } from './mails/verification.mail';
 import { passwordResetMail } from './mails/passwordResetMail.mail';
@@ -7,6 +7,8 @@ import { scheduledQuizAlertMail, ScheduledQuizAlertMailData } from './mails/sche
 
 @Injectable()
 export class MailService {
+  private readonly logger = new Logger(MailService.name);
+
   constructor(
     @Inject('RESEND_CLIENT')
     private readonly resend: Resend,
@@ -16,49 +18,69 @@ export class MailService {
     email: string,
     OTP: string,
   ) {
-    const verificationMailConfig = verificationMail;
-    console.log(`[Mail] Verification OTP dispatched to ${email}`);
-    return this.resend.emails.send({
-      from: verificationMailConfig.from,
-      to: email,
-      subject: verificationMailConfig.subject,
-      html: verificationMailConfig.template({ OTP: OTP }),
-    });
+    const config = verificationMail;
+    this.logger.log(`Dispatching verification OTP [${OTP}] to ${email}`);
+    try {
+      return await this.resend.emails.send({
+        from: config.from,
+        to: email,
+        subject: config.subject,
+        html: config.template({ OTP, email }),
+      });
+    } catch (err: any) {
+      this.logger.error(`Failed to dispatch verification email to ${email}: ${err?.message || err}`);
+      throw err;
+    }
   }
 
   async sendPasswordResetEmail(
     email: string,
     OTP: string,
   ) {
-    const passwordResetMailConfig = passwordResetMail;
-    console.log(`[Mail] Password reset email dispatched to ${email}`);
-    return this.resend.emails.send({
-      from: passwordResetMailConfig.from,
-      to: email,
-      subject: passwordResetMailConfig.subject,
-      html: passwordResetMailConfig.template({ OTP: OTP }),
-    });
+    const config = passwordResetMail;
+    this.logger.log(`Dispatching password reset OTP to ${email}`);
+    try {
+      return await this.resend.emails.send({
+        from: config.from,
+        to: email,
+        subject: config.subject,
+        html: config.template({ OTP, email }),
+      });
+    } catch (err: any) {
+      this.logger.error(`Failed to dispatch password reset email to ${email}: ${err?.message || err}`);
+      throw err;
+    }
   }
 
   async sendSupportTicketEmail(data: SupportTicketMailData) {
     const config = supportTicketMail;
-    console.log(`[Mail] Support ticket [${data.ticketId}] dispatched to ${data.email}`);
-    return this.resend.emails.send({
-      from: config.from,
-      to: data.email,
-      subject: `Support Ticket Received: [${data.ticketId}] - ${data.subject}`,
-      html: config.template(data),
-    });
+    this.logger.log(`Dispatching support ticket confirmation [${data.ticketId}] to ${data.email}`);
+    try {
+      return await this.resend.emails.send({
+        from: config.from,
+        to: data.email,
+        subject: `Support Ticket Received: [${data.ticketId}] - ${data.subject}`,
+        html: config.template(data),
+      });
+    } catch (err: any) {
+      this.logger.error(`Failed to dispatch support ticket email to ${data.email}: ${err?.message || err}`);
+      throw err;
+    }
   }
 
   async sendScheduledQuizAlertEmail(data: ScheduledQuizAlertMailData) {
     const config = scheduledQuizAlertMail;
-    console.log(`[Mail] 5-min launch alert for "${data.quizTitle}" dispatched to ${data.ownerEmail}`);
-    return this.resend.emails.send({
-      from: config.from,
-      to: data.ownerEmail,
-      subject: `T-Minus 5 Minutes: "${data.quizTitle}" Launches Soon [PIN: ${data.pin}]`,
-      html: config.template(data),
-    });
+    this.logger.log(`Dispatching 5-min launch alert for "${data.quizTitle}" to ${data.ownerEmail}`);
+    try {
+      return await this.resend.emails.send({
+        from: config.from,
+        to: data.ownerEmail,
+        subject: `T-Minus 5 Minutes: "${data.quizTitle}" Launches Soon [PIN: ${data.pin}]`,
+        html: config.template(data),
+      });
+    } catch (err: any) {
+      this.logger.error(`Failed to dispatch scheduled quiz alert to ${data.ownerEmail}: ${err?.message || err}`);
+      throw err;
+    }
   }
 }

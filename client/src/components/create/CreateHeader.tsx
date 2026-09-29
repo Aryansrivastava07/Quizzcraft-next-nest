@@ -10,11 +10,15 @@ export default function CreateHeader() {
     <header className="fixed top-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-max-width-canvas rounded-full bg-surface-container-lowest/75 backdrop-blur-xl border border-outline-variant/30 shadow-2xl shadow-primary-container/10 flex justify-between items-center px-6 py-2.5 z-50 transition-all duration-300">
       {/* Brand Logo Anchor */}
       <Link
-        className="flex items-center gap-2 text-headline-sm font-headline-sm tracking-tight text-primary font-extrabold group"
+        className="flex items-center gap-2.5 text-headline-sm font-headline-sm tracking-tight text-primary font-extrabold group"
         href="/"
       >
-        <span className="w-8 h-8 rounded-lg bg-surface-container-highest flex items-center justify-center border border-primary/40 shadow-inner group-hover:border-primary transition-all">
-          <span className="material-symbols-outlined text-primary">school</span>
+        <span className="w-8 h-8 rounded-lg overflow-hidden border border-primary/40 shadow-inner group-hover:border-primary transition-all flex items-center justify-center bg-surface-container-high shrink-0">
+          <img
+            src="/images/logo-icon.png"
+            alt="QuizzCraft Logo"
+            className="w-full h-full object-cover"
+          />
         </span>
         <span>QuizzCraft.app</span>
       </Link>
