@@ -1,6 +1,7 @@
 import {
   IsEmail,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   IsStrongPassword,
@@ -35,6 +36,22 @@ export class RegisterAuthDto {
       @IsNotEmpty()
       @IsStrongPassword()
       password!: string;
+
+      @IsString()
+      @IsOptional()
+      fullName?: string;
+
+      @IsString()
+      @IsOptional()
+      institution?: string;
+
+      @IsString()
+      @IsOptional()
+      phoneNumber?: string;
+
+      @IsNumber()
+      @IsOptional()
+      mobileNo?: number;
 }
 
 export class LogoutAuthDto {

@@ -173,6 +173,9 @@ function CreatorEditorContent() {
   const [quizId, setQuizId] = useState<string | null>(quizIdParam);
   const [quizPin, setQuizPin] = useState<string | null>(null);
   const [quizTitle, setQuizTitle] = useState<string>("Artificial Intelligence Fundamentals");
+  const [coverImage, setCoverImage] = useState<string>("");
+  const [isEditingCover, setIsEditingCover] = useState<boolean>(false);
+  const [coverInputUrl, setCoverInputUrl] = useState<string>("");
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -229,6 +232,10 @@ function CreatorEditorContent() {
             const fetched = response.data.quiz;
             setQuizTitle(fetched.title || "Custom Generated Quiz");
             setQuizId(fetched.quizId);
+            if (fetched.coverImage) {
+              setCoverImage(fetched.coverImage);
+              setCoverInputUrl(fetched.coverImage);
+            }
             if (fetched.pin) {
               setQuizPin(fetched.pin);
             }
@@ -270,6 +277,10 @@ function CreatorEditorContent() {
               if (cached.quizId === targetQuizId && cached.questions?.length > 0) {
                 setQuizTitle(cached.title || "Cached Quiz");
                 setQuizId(cached.quizId);
+                if (cached.coverImage) {
+                  setCoverImage(cached.coverImage);
+                  setCoverInputUrl(cached.coverImage);
+                }
                 if (cached.immediateResult !== undefined) {
                   setImmediateResult(cached.immediateResult);
                 }
@@ -301,6 +312,10 @@ function CreatorEditorContent() {
             if (cached.quizId && cached.questions?.length > 0) {
               setQuizTitle(cached.title || "Review & Edit Questions");
               setQuizId(cached.quizId);
+              if (cached.coverImage) {
+                setCoverImage(cached.coverImage);
+                setCoverInputUrl(cached.coverImage);
+              }
               const mapped = mapBackendQuestions(cached.questions);
               setQuestions(mapped);
               if (mapped.length > 0) {
@@ -316,6 +331,8 @@ function CreatorEditorContent() {
         // Fallback demo questions if nothing found
         setIsDemoMode(true);
         setQuizTitle("Quantum Computing Principles (Preview Mode)");
+        setCoverImage("/stitch/screen-6-cosmic-portal-3d.png");
+        setCoverInputUrl("/stitch/screen-6-cosmic-portal-3d.png");
         setQuestions(initialQuestions);
         setActiveQuestionId(1);
         setShowExplanation({ 1: true });
@@ -533,6 +550,26 @@ function CreatorEditorContent() {
     }
   };
 
+  // Update Quiz Cover Image — mapped directly to backend PUT /api/quiz/:quizId
+  const handleSaveCoverImage = async (newUrl: string) => {
+    const finalUrl = newUrl.trim();
+    setCoverImage(finalUrl);
+    setIsEditingCover(false);
+
+    if (quizId) {
+      setIsSaving(true);
+      try {
+        await quizService.updateQuiz(quizId, { coverImage: finalUrl });
+        setSuccessToast("Cover artwork updated successfully in database!");
+      } catch (err: any) {
+        console.error("Backend error updating cover image:", err);
+        setApiError(err?.message || "Failed to update cover image in backend.");
+      } finally {
+        setIsSaving(false);
+      }
+    }
+  };
+
   if (isLoading) {
     return <EditorLoadingSkeleton />;
   }
@@ -550,37 +587,60 @@ function CreatorEditorContent() {
         <ParallaxReveal direction="up" distance={20} duration={650} className="flex flex-col gap-6 w-full">
           {/* Hero Header */}
           <section className="flex flex-col md:flex-row md:items-end justify-between gap-4 pt-2">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2 flex-wrap text-xs">
-                {isDemoMode && (
-                  <span className="font-label-code px-2.5 py-0.5 rounded-full bg-secondary-container/40 text-primary border border-primary/30 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse" />
-                    Preview Mode
-                  </span>
-                )}
-                {quizId && (
-                  <span className="font-label-code text-[11px] text-on-surface-variant bg-surface-container-low px-2 py-0.5 rounded border border-outline-variant/30">
-                    ID: {quizId.slice(0, 8)}...
-                  </span>
-                )}
-                {quizPin && (
-                  <span className="font-label-code text-[11px] text-tertiary bg-tertiary/10 px-2.5 py-0.5 rounded border border-tertiary/30 font-bold flex items-center gap-1 shadow-sm">
-                    <span className="material-symbols-outlined text-xs">pin</span>
-                    PIN: {quizPin.length === 6 ? `${quizPin.slice(0, 3)}-${quizPin.slice(3)}` : quizPin}
-                  </span>
-                )}
-                {/* Dedicated Total EXP Tab */}
-                <span className="font-label-code px-2.5 py-0.5 rounded-full bg-tertiary/10 text-tertiary border border-tertiary/30 font-bold flex items-center gap-1 shadow-sm">
-                  <span className="material-symbols-outlined text-xs">electric_bolt</span>
-                  Total EXP: {totalExp} XP
-                </span>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div
+                onClick={() => {
+                  setCoverInputUrl(coverImage || "");
+                  setIsEditingCover(true);
+                }}
+                className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-primary/30 shrink-0 shadow-lg bg-surface-container-highest group cursor-pointer"
+                title="Click to customize Arena Cover Artwork"
+              >
+                <img
+                  src={coverImage || "/stitch/screen-6-cosmic-portal-3d.png"}
+                  alt={quizTitle}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '/stitch/screen-6-cosmic-portal-3d.png';
+                  }}
+                />
+                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-primary text-xs font-label-code">
+                  <span className="material-symbols-outlined text-base">edit</span>
+                </div>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-headline-xl text-on-surface tracking-tight font-extrabold">
-                {quizTitle}
-              </h1>
-              <p className="text-xs sm:text-sm font-body-md text-on-surface-variant max-w-xl">
-                Inspect AI-generated questions, tweak choices, adjust difficulty, and verify answers before publishing to your arena.
-              </p>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 flex-wrap text-xs">
+                  {isDemoMode && (
+                    <span className="font-label-code px-2.5 py-0.5 rounded-full bg-secondary-container/40 text-primary border border-primary/30 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse" />
+                      Preview Mode
+                    </span>
+                  )}
+                  {quizId && (
+                    <span className="font-label-code text-[11px] text-on-surface-variant bg-surface-container-low px-2 py-0.5 rounded border border-outline-variant/30">
+                      ID: {quizId.slice(0, 8)}...
+                    </span>
+                  )}
+                  {quizPin && (
+                    <span className="font-label-code text-[11px] text-tertiary bg-tertiary/10 px-2.5 py-0.5 rounded border border-tertiary/30 font-bold flex items-center gap-1 shadow-sm">
+                      <span className="material-symbols-outlined text-xs">pin</span>
+                      PIN: {quizPin.length === 6 ? `${quizPin.slice(0, 3)}-${quizPin.slice(3)}` : quizPin}
+                    </span>
+                  )}
+                  {/* Dedicated Total EXP Tab */}
+                  <span className="font-label-code px-2.5 py-0.5 rounded-full bg-tertiary/10 text-tertiary border border-tertiary/30 font-bold flex items-center gap-1 shadow-sm">
+                    <span className="material-symbols-outlined text-xs">electric_bolt</span>
+                    Total EXP: {totalExp} XP
+                  </span>
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-headline-xl text-on-surface tracking-tight font-extrabold">
+                  {quizTitle}
+                </h1>
+                <p className="text-xs sm:text-sm font-body-md text-on-surface-variant max-w-xl">
+                  Inspect AI-generated questions, tweak choices, adjust difficulty, and verify answers before publishing to your arena.
+                </p>
+              </div>
             </div>
 
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
@@ -1272,6 +1332,134 @@ function CreatorEditorContent() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Arena Cover Artwork Edit Modal */}
+        {isEditingCover && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-surface-container-lowest/80 backdrop-blur-xl animate-fadeIn">
+            <div className="w-full max-w-xl rounded-3xl glass-kage border border-white/15 p-6 sm:p-8 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between pb-3 border-b border-white/10">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-primary-container/20 border border-primary/40 flex items-center justify-center text-primary">
+                    <span className="material-symbols-outlined text-base">image</span>
+                  </div>
+                  <div>
+                    <h3 className="font-headline-sm text-base font-bold text-white">
+                      Arena Cover Artwork
+                    </h3>
+                    <span className="text-[11px] font-label-code text-on-surface-variant">
+                      Customize preview banner for this quiz arena
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsEditingCover(false)}
+                  className="p-1 rounded-lg hover:bg-white/10 text-outline hover:text-white transition-colors cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-xl">close</span>
+                </button>
+              </div>
+
+              {/* Live Preview Card */}
+              <div className="space-y-2">
+                <span className="text-xs font-semibold text-white uppercase tracking-wider font-headline-sm">
+                  Artwork Preview
+                </span>
+                <div className="relative w-full h-44 rounded-2xl overflow-hidden border border-white/15 bg-surface-container-highest shadow-inner">
+                  <img
+                    src={coverInputUrl || "/stitch/screen-6-cosmic-portal-3d.png"}
+                    alt="Cover preview"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/stitch/screen-6-cosmic-portal-3d.png';
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-4">
+                    <span className="font-headline-sm text-sm text-white font-bold truncate">
+                      {quizTitle}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Curated HD Presets */}
+              <div className="space-y-2">
+                <span className="text-xs font-semibold text-white uppercase tracking-wider font-headline-sm">
+                  Curated Presets
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: "Cosmic Portal", url: "/stitch/screen-6-cosmic-portal-3d.png" },
+                    { label: "Quantum", url: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=1200&q=80" },
+                    { label: "Cyber AI", url: "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?auto=format&fit=crop&w=1200&q=80" },
+                    { label: "Deep Space", url: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80" },
+                    { label: "Coding / Tech", url: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=1200&q=80" },
+                    { label: "Genetics / Bio", url: "https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=1200&q=80" },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => setCoverInputUrl(preset.url)}
+                      className={`px-3 py-1.5 rounded-xl font-label-code text-xs border transition-all cursor-pointer ${
+                        coverInputUrl === preset.url
+                          ? "bg-primary text-black font-bold border-primary shadow-sm"
+                          : "bg-surface-container/60 hover:bg-surface-container border-outline-variant/30 text-on-surface"
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom Image URL Input */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-white uppercase tracking-wider font-headline-sm">
+                  Custom Image URL
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={coverInputUrl}
+                    onChange={(e) => setCoverInputUrl(e.target.value)}
+                    placeholder="https://images.unsplash.com/... or /path/to/image"
+                    className="flex-1 px-3.5 py-2 rounded-xl bg-surface-container/60 border border-outline-variant/40 text-on-surface text-xs focus:outline-none focus:border-primary font-label-code"
+                  />
+                  {coverInputUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setCoverInputUrl("")}
+                      className="px-3 py-2 rounded-xl bg-surface-container hover:bg-surface-bright text-on-surface-variant hover:text-white text-xs font-label-code border border-outline-variant/30 cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setIsEditingCover(false)}
+                  className="px-4 py-2 rounded-xl bg-surface-container-high hover:bg-surface-bright text-on-surface text-xs font-headline-sm transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => handleSaveCoverImage(coverInputUrl)}
+                  className="px-6 py-2 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white font-headline-sm text-xs font-semibold shadow-sm border border-white/10 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-sm">save</span>
+                  <span>{isSaving ? "Saving..." : "Apply Cover Art"}</span>
+                </button>
+              </div>
             </div>
           </div>
         )}

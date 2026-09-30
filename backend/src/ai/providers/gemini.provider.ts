@@ -116,9 +116,8 @@ export class GeminiProvider implements AiProvider {
         new Set([
           this.model,
           'gemini-3.5-flash-lite',
-          'gemini-3.6-flash',
-          'gemini-3.1-flash-lite',
           'gemini-3.8-flash',
+          'gemini-3-flash-preview',
         ]),
       );
 
@@ -196,8 +195,14 @@ export class GeminiProvider implements AiProvider {
         throw new Error(`Unexpected Error: ${error.message}`);
       }
     } finally {
-      // console.log(uploads.map((file) => file.path));
       await this._cleanupFiles(uploads.map((file) => file.path) || []);
+      for (const gemFile of geminiUploads) {
+        if (gemFile?.name) {
+          await this.client.files.delete({ name: gemFile.name }).catch((err: any) => {
+            console.warn(`[GeminiProvider] Remote file cleanup warning for ${gemFile.name}:`, err?.message);
+          });
+        }
+      }
     }
   }
 }

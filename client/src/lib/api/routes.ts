@@ -3,7 +3,9 @@
  * Mapped from NestJS Controllers in D:\Aryan\coding\projects\quizz-craft\backend
  */
 
-export const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+// When using Next.js / Vercel proxy rewrites, use relative URL ("") so the browser treats API requests as same-domain.
+// This allows cookies (accessToken, refreshToken, RESET_PASS_TOKEN) to be stored as 1st-party cookies and automatically attached by the browser.
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export const API_ROUTES = {
   // ==========================================
@@ -66,6 +68,10 @@ export const API_ROUTES = {
     waitlist: (quizId: string) => `${API_BASE_URL}/api/quiz/${quizId}/waitlist`,
     // POST: Conclude/close live quiz session
     close: (quizId: string) => `${API_BASE_URL}/api/quiz/${quizId}/close`,
+    // GET: Explore deployed public quizzes
+    public: (params?: string) => `${API_BASE_URL}/api/quiz/public${params ? `?${params}` : ''}`,
+    // GET: Quiz review, analytics & leaderboard (no questions shown)
+    review: (quizId: string) => `${API_BASE_URL}/api/quiz/${quizId}/review`,
   },
 
   // ==========================================

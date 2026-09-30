@@ -12,11 +12,13 @@ export interface IQuiz {
   quizId: string;
   pin?: string;
   title: string;
+  coverImage?: string;
   ownerId?: string;
   ownerEmail?: string;
   accessMode?: 'PUBLIC' | 'PRIVATE' | 'ORGANIZATION';
   organizationDomain?: string;
   deploymentType?: 'LIVE' | 'SCHEDULED' | 'ANYTIME';
+  isDeployed?: boolean;
   status?: 'DRAFT' | 'SCHEDULED' | 'LIVE' | 'ANYTIME' | 'ENDED';
   scheduledFor?: Date | string;
   liveDurationMinutes?: number;

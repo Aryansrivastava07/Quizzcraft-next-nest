@@ -51,6 +51,7 @@ function DeployScheduleContent() {
   const [quizId, setQuizId] = useState("QC-9804-QBIT");
   const [pin, setPin] = useState("884-219");
   const [quizTitle, setQuizTitle] = useState("Quantum Computing Principles");
+  const [coverImage, setCoverImage] = useState<string>("");
   const [questionCount, setQuestionCount] = useState(15);
   const [totalXp, setTotalXp] = useState(2250);
 
@@ -122,6 +123,9 @@ function DeployScheduleContent() {
           if (q) {
             setQuizId(q.quizId);
             setQuizTitle(q.title || "Quantum Computing Principles");
+            if (q.coverImage) {
+              setCoverImage(q.coverImage);
+            }
             if (q.pin) {
               const rawPin = String(q.pin).replace(/\D/g, "");
               setPin(rawPin.length === 6 ? `${rawPin.slice(0, 3)}-${rawPin.slice(3)}` : rawPin);
@@ -399,9 +403,12 @@ function DeployScheduleContent() {
               <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex-shrink-0 rounded-2xl overflow-hidden p-1.5 bg-gradient-to-b from-primary/30 via-outline-variant/20 to-tertiary/20 shadow-2xl">
                 <div className="relative w-full h-full rounded-xl overflow-hidden bg-surface-container-lowest">
                   <img
-                    src="/stitch/screen-6-cosmic-portal-3d.png"
-                    alt="Holographic Quantum Sphere representing quiz telemetry engine"
+                    src={coverImage || "/stitch/screen-6-cosmic-portal-3d.png"}
+                    alt={quizTitle}
                     className="w-full h-full object-cover transform hover:scale-110 transition-transform duration-700"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = "/stitch/screen-6-cosmic-portal-3d.png";
+                    }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-surface-container-lowest/80 via-transparent to-transparent" />
                   <div className="absolute bottom-2 left-2 right-2 flex justify-between items-center text-[10px] font-label-code text-primary-fixed-dim bg-surface-container-low/80 backdrop-blur-sm px-2 py-1 rounded">

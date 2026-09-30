@@ -5,6 +5,8 @@ import {
   GenerateQuizParams,
   AttemptSession,
   AnswerQuizDto,
+  PublicQuizzesResponse,
+  QuizReviewData,
 } from "./types";
 
 export const quizService = {
@@ -88,6 +90,7 @@ export const quizService = {
     quizId: string,
     data: {
       title?: string;
+      coverImage?: string;
       questions?: any[];
       immediateResult?: boolean;
       questime?: number;
@@ -289,5 +292,33 @@ export const quizService = {
         method: "POST",
       }
     );
+  },
+
+  /**
+   * Fetch all deployed public quizzes for discovery
+   * Never shows undeployed / draft quizzes
+   */
+  async getPublicQuizzes(params?: { search?: string; status?: string; page?: number; limit?: number }) {
+    const query = new URLSearchParams();
+    if (params?.search) query.set("search", params.search);
+    if (params?.status && params.status !== "ALL") query.set("status", params.status);
+    if (params?.page) query.set("page", String(params.page));
+    if (params?.limit) query.set("limit", String(params.limit));
+
+    const qs = query.toString();
+    return apiClient<PublicQuizzesResponse>(API_ROUTES.quiz.public(qs ? qs : undefined), {
+      method: "GET",
+    });
+  },
+
+  /**
+   * Fetch quiz review analytics & leaderboard
+   * Accessible to quiz creators or to everyone if quiz is public
+   * Never contains question statements or answers
+   */
+  async getQuizReview(quizId: string) {
+    return apiClient<QuizReviewData>(API_ROUTES.quiz.review(quizId), {
+      method: "GET",
+    });
   },
 };

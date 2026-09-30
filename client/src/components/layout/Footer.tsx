@@ -15,9 +15,13 @@ export default function Footer() {
     <footer className="w-full bg-surface-container-lowest/90 border-t border-outline-variant/30 relative z-10 backdrop-blur-md">
       <div className="max-w-max-width-canvas mx-auto px-gutter-desktop py-10 flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex flex-col sm:flex-row items-center gap-4">
-          <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-primary to-tertiary flex items-center justify-center shadow-md">
-              <span className="material-symbols-outlined text-white text-sm">bolt</span>
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="w-7 h-7 rounded-lg overflow-hidden border border-white/15 flex items-center justify-center shadow-md shadow-primary-container/20 group-hover:scale-105 transition-transform bg-surface-container-high shrink-0">
+              <img
+                src="/images/logo-icon.png"
+                alt="QuizzCraft Logo"
+                className="w-full h-full object-cover"
+              />
             </div>
             <span className="font-headline-sm text-white font-bold">
               QuizzCraft<span className="text-tertiary">.app</span>

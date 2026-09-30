@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import CosmicCanvas from "@/components/canvas/CosmicCanvas";
 import Navbar from "@/components/layout/Navbar";
@@ -13,22 +13,41 @@ function CreateQuizContent() {
   const router = useRouter();
 
   // Multi-select input sources
-  type SourceType = "pdf" | "image" | "text" | "url";
-  const [selectedSources, setSelectedSources] = useState<SourceType[]>(["pdf"]);
+  type SourceType = "pdf" | "image" | "video" | "text" | "url";
+  const [selectedSources, setSelectedSources] = useState<SourceType[]>(["pdf", "text"]);
   const [topicPrompt, setTopicPrompt] = useState("");
   const [urlInput, setUrlInput] = useState("");
-  const [stagedFiles, setStagedFiles] = useState<string[]>([
-    "Quantum_Physics_Notes.pdf (4.2 MB)",
-  ]);
-  const [stagedImages, setStagedImages] = useState<
-    { name: string; size: string; preview: string }[]
-  >([
-    {
-      name: "Quantum_Circuit_Schematic.png",
-      size: "1.4 MB",
-      preview: "/stitch/screen-6-cosmic-portal-3d.png",
-    },
-  ]);
+
+  // Real uploaded file state
+  const [pdfFiles, setPdfFiles] = useState<File[]>([]);
+  const [imageFiles, setImageFiles] = useState<{ file: File; preview: string }[]>([]);
+  const [videoFiles, setVideoFiles] = useState<File[]>([]);
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  // Drag over states
+  const [isDraggingPdf, setIsDraggingPdf] = useState(false);
+  const [isDraggingImage, setIsDraggingImage] = useState(false);
+  const [isDraggingVideo, setIsDraggingVideo] = useState(false);
+
+  // Hidden file input references
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-dismiss file errors
+  useEffect(() => {
+    if (fileError) {
+      const t = setTimeout(() => setFileError(null), 6000);
+      return () => clearTimeout(t);
+    }
+  }, [fileError]);
+
+  // Clean up object URLs on unmount
+  useEffect(() => {
+    return () => {
+      imageFiles.forEach((item) => URL.revokeObjectURL(item.preview));
+    };
+  }, [imageFiles]);
 
   const toggleSource = (type: SourceType) => {
     setSelectedSources((prev) => {
@@ -40,19 +59,108 @@ function CreateQuizContent() {
     });
   };
 
-  const handleSimulateAddImage = () => {
-    setStagedImages((prev) => [
-      ...prev,
-      {
-        name: `Diagram_Formula_Sheet_${prev.length + 1}.png`,
-        size: "2.1 MB",
-        preview: "/stitch/screen-6-cosmic-portal-3d.png",
-      },
-    ]);
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  // PDF Handlers (Max 2 files, up to 50MB each)
+  const handlePdfUpload = (files: FileList | File[]) => {
+    setFileError(null);
+    const validFiles: File[] = [];
+    const maxPdfCount = 2;
+    const maxPdfSize = 50 * 1024 * 1024; // 50MB
+
+    Array.from(files).forEach((file) => {
+      const ext = file.name.toLowerCase();
+      const isValidExt = ext.endsWith(".pdf") || ext.endsWith(".docx") || ext.endsWith(".txt");
+      if (!isValidExt) {
+        setFileError(`File "${file.name}" is not a supported document (.pdf, .docx, .txt).`);
+        return;
+      }
+      if (file.size > maxPdfSize) {
+        setFileError(`Document "${file.name}" exceeds the 50MB size limit.`);
+        return;
+      }
+      validFiles.push(file);
+    });
+
+    setPdfFiles((prev) => {
+      const combined = [...prev, ...validFiles];
+      if (combined.length > maxPdfCount) {
+        setFileError(`Maximum ${maxPdfCount} document files allowed. Only the first ${maxPdfCount} were retained.`);
+        return combined.slice(0, maxPdfCount);
+      }
+      return combined;
+    });
+  };
+
+  const handleRemovePdf = (index: number) => {
+    setPdfFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Image Handlers (Max 5 images, up to 20MB each)
+  const handleImageUpload = (files: FileList | File[]) => {
+    setFileError(null);
+    const validImages: { file: File; preview: string }[] = [];
+    const maxImgCount = 5;
+    const maxImgSize = 20 * 1024 * 1024; // 20MB
+
+    Array.from(files).forEach((file) => {
+      if (!file.type.startsWith("image/")) {
+        setFileError(`File "${file.name}" is not a recognized image.`);
+        return;
+      }
+      if (file.size > maxImgSize) {
+        setFileError(`Image "${file.name}" exceeds the 20MB limit.`);
+        return;
+      }
+      const preview = URL.createObjectURL(file);
+      validImages.push({ file, preview });
+    });
+
+    setImageFiles((prev) => {
+      const combined = [...prev, ...validImages];
+      if (combined.length > maxImgCount) {
+        setFileError(`Maximum ${maxImgCount} images allowed. Only the first ${maxImgCount} were kept.`);
+        combined.slice(maxImgCount).forEach((item) => URL.revokeObjectURL(item.preview));
+        return combined.slice(0, maxImgCount);
+      }
+      return combined;
+    });
   };
 
   const handleRemoveImage = (index: number) => {
-    setStagedImages((prev) => prev.filter((_, i) => i !== index));
+    setImageFiles((prev) => {
+      const target = prev[index];
+      if (target?.preview) {
+        URL.revokeObjectURL(target.preview);
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  // Video Handlers (Max 1 video, up to 50MB)
+  const handleVideoUpload = (files: FileList | File[]) => {
+    setFileError(null);
+    const file = Array.from(files)[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("video/") && !/\.(mp4|webm|mov|avi|mkv)$/i.test(file.name)) {
+      setFileError(`File "${file.name}" is not a recognized video file.`);
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      setFileError(`Video "${file.name}" exceeds the 50MB limit.`);
+      return;
+    }
+
+    setVideoFiles([file]);
+  };
+
+  const handleRemoveVideo = () => {
+    setVideoFiles([]);
   };
 
   // Quiz preferences
@@ -76,7 +184,25 @@ function CreateQuizContent() {
     setIsGenerating(true);
     setProgressStatus("Dispatching quiz generation to backend Gemini engine...");
 
-    const promptText = topicPrompt.trim() || "Quantum Physics Foundations and Circuit Analysis";
+    const realPdfs = selectedSources.includes("pdf") ? pdfFiles : [];
+    const realImages = selectedSources.includes("image") ? imageFiles.map((i) => i.file) : [];
+    const realVideos = selectedSources.includes("video") ? videoFiles : [];
+
+    let promptText = topicPrompt.trim();
+    if (!promptText) {
+      const fileNames = [
+        ...realPdfs.map((f) => f.name),
+        ...realImages.map((f) => f.name),
+        ...realVideos.map((f) => f.name),
+      ];
+      if (fileNames.length > 0) {
+        promptText = `Generate a high-yield, comprehensive educational quiz covering the key concepts and facts from: ${fileNames.join(", ")}`;
+      } else if (selectedSources.includes("url") && urlInput.trim()) {
+        promptText = `Generate a quiz based on content from: ${urlInput.trim()}`;
+      } else {
+        promptText = "Quantum Physics Foundations and Applied Science";
+      }
+    }
 
     try {
       const response = await quizService.generateQuiz({
@@ -85,6 +211,9 @@ function CreateQuizContent() {
         difficulty,
         quizType,
         sourceUrl: selectedSources.includes("url") && urlInput.trim() ? urlInput.trim() : undefined,
+        images: realImages.length > 0 ? realImages : undefined,
+        videos: realVideos.length > 0 ? realVideos : undefined,
+        pdfs: realPdfs.length > 0 ? realPdfs : undefined,
       });
 
       if (response?.data?.quiz) {
@@ -124,13 +253,6 @@ function CreateQuizContent() {
   const handleProceedToDeploy = () => {
     if (!createdQuizPayload) return;
     router.push(`/deploy?quizId=${encodeURIComponent(createdQuizPayload.quizId)}`);
-  };
-
-  const handleSimulateDrop = () => {
-    setStagedFiles((prev) => [
-      ...prev,
-      `Lecture_Slides_${prev.length + 1}.pdf (2.8 MB)`,
-    ]);
   };
 
   return (
@@ -176,13 +298,13 @@ function CreateQuizContent() {
               </span>
             </div>
 
-            {/* 4 Multi-Select Options */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {/* 5 Multi-Select Source Options */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {/* Option 1: PDF / Documents */}
               <button
                 type="button"
                 onClick={() => toggleSource("pdf")}
-                className={`p-4 rounded-xl border flex flex-col items-center gap-2.5 text-center transition-all cursor-pointer relative ${
+                className={`p-3.5 rounded-xl border flex flex-col items-center gap-2 text-center transition-all cursor-pointer relative ${
                   selectedSources.includes("pdf")
                     ? "bg-primary-container/20 border-primary text-white shadow-md shadow-primary/20"
                     : "bg-surface-container/50 border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
@@ -193,26 +315,28 @@ function CreateQuizContent() {
                     picture_as_pdf
                   </span>
                   <span
-                    className={`w-4 h-4 rounded-md flex items-center justify-center border text-[10px] ${
+                    className={`min-w-4 h-4 px-1 rounded-md flex items-center justify-center border text-[10px] ${
                       selectedSources.includes("pdf")
                         ? "bg-primary text-on-primary border-primary font-bold"
                         : "border-outline-variant/60"
                     }`}
                   >
-                    {selectedSources.includes("pdf") && "✓"}
+                    {selectedSources.includes("pdf") ? (pdfFiles.length > 0 ? pdfFiles.length : "✓") : ""}
                   </span>
                 </div>
                 <div className="text-left w-full">
                   <span className="text-xs font-semibold block">PDF / Notes</span>
-                  <span className="text-[10px] text-on-surface-variant">Syllabi, PDFs, TXT</span>
+                  <span className="text-[10px] text-on-surface-variant">
+                    {pdfFiles.length > 0 ? `${pdfFiles.length} file${pdfFiles.length > 1 ? "s" : ""}` : "Syllabi, PDFs, TXT"}
+                  </span>
                 </div>
               </button>
 
-              {/* Option 2: Images & Diagrams (NEW) */}
+              {/* Option 2: Images & Diagrams */}
               <button
                 type="button"
                 onClick={() => toggleSource("image")}
-                className={`p-4 rounded-xl border flex flex-col items-center gap-2.5 text-center transition-all cursor-pointer relative ${
+                className={`p-3.5 rounded-xl border flex flex-col items-center gap-2 text-center transition-all cursor-pointer relative ${
                   selectedSources.includes("image")
                     ? "bg-primary-container/20 border-primary text-white shadow-md shadow-primary/20"
                     : "bg-surface-container/50 border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
@@ -223,26 +347,60 @@ function CreateQuizContent() {
                     image
                   </span>
                   <span
-                    className={`w-4 h-4 rounded-md flex items-center justify-center border text-[10px] ${
+                    className={`min-w-4 h-4 px-1 rounded-md flex items-center justify-center border text-[10px] ${
                       selectedSources.includes("image")
                         ? "bg-primary text-on-primary border-primary font-bold"
                         : "border-outline-variant/60"
                     }`}
                   >
-                    {selectedSources.includes("image") && "✓"}
+                    {selectedSources.includes("image") ? (imageFiles.length > 0 ? imageFiles.length : "✓") : ""}
                   </span>
                 </div>
                 <div className="text-left w-full">
                   <span className="text-xs font-semibold block">Images &amp; Diagrams</span>
-                  <span className="text-[10px] text-on-surface-variant">Formulas, charts, photos</span>
+                  <span className="text-[10px] text-on-surface-variant">
+                    {imageFiles.length > 0 ? `${imageFiles.length} attached` : "Formulas, charts"}
+                  </span>
                 </div>
               </button>
 
-              {/* Option 3: Topic / Prompt */}
+              {/* Option 3: Video Lecture */}
+              <button
+                type="button"
+                onClick={() => toggleSource("video")}
+                className={`p-3.5 rounded-xl border flex flex-col items-center gap-2 text-center transition-all cursor-pointer relative ${
+                  selectedSources.includes("video")
+                    ? "bg-primary-container/20 border-primary text-white shadow-md shadow-primary/20"
+                    : "bg-surface-container/50 border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
+                }`}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="material-symbols-outlined text-2xl text-violet-400">
+                    video_library
+                  </span>
+                  <span
+                    className={`min-w-4 h-4 px-1 rounded-md flex items-center justify-center border text-[10px] ${
+                      selectedSources.includes("video")
+                        ? "bg-primary text-on-primary border-primary font-bold"
+                        : "border-outline-variant/60"
+                    }`}
+                  >
+                    {selectedSources.includes("video") ? (videoFiles.length > 0 ? "1" : "✓") : ""}
+                  </span>
+                </div>
+                <div className="text-left w-full">
+                  <span className="text-xs font-semibold block">Video Lecture</span>
+                  <span className="text-[10px] text-on-surface-variant">
+                    {videoFiles.length > 0 ? "1 video ready" : "MP4, WebM clip"}
+                  </span>
+                </div>
+              </button>
+
+              {/* Option 4: Topic / Prompt */}
               <button
                 type="button"
                 onClick={() => toggleSource("text")}
-                className={`p-4 rounded-xl border flex flex-col items-center gap-2.5 text-center transition-all cursor-pointer relative ${
+                className={`p-3.5 rounded-xl border flex flex-col items-center gap-2 text-center transition-all cursor-pointer relative ${
                   selectedSources.includes("text")
                     ? "bg-primary-container/20 border-primary text-white shadow-md shadow-primary/20"
                     : "bg-surface-container/50 border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
@@ -264,15 +422,15 @@ function CreateQuizContent() {
                 </div>
                 <div className="text-left w-full">
                   <span className="text-xs font-semibold block">Topic / Prompt</span>
-                  <span className="text-[10px] text-on-surface-variant">Custom instructions</span>
+                  <span className="text-[10px] text-on-surface-variant">Instructions</span>
                 </div>
               </button>
 
-              {/* Option 4: Web / YouTube */}
+              {/* Option 5: Web / URL */}
               <button
                 type="button"
                 onClick={() => toggleSource("url")}
-                className={`p-4 rounded-xl border flex flex-col items-center gap-2.5 text-center transition-all cursor-pointer relative ${
+                className={`p-3.5 rounded-xl border flex flex-col items-center gap-2 text-center transition-all cursor-pointer relative ${
                   selectedSources.includes("url")
                     ? "bg-primary-container/20 border-primary text-white shadow-md shadow-primary/20"
                     : "bg-surface-container/50 border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:bg-surface-container"
@@ -293,15 +451,34 @@ function CreateQuizContent() {
                   </span>
                 </div>
                 <div className="text-left w-full">
-                  <span className="text-xs font-semibold block">Web / Video</span>
-                  <span className="text-[10px] text-on-surface-variant">URLs, YouTube links</span>
+                  <span className="text-xs font-semibold block">Web / URL</span>
+                  <span className="text-[10px] text-on-surface-variant">URLs, links</span>
                 </div>
               </button>
             </div>
 
+            {/* File Error Alert */}
+            {fileError && (
+              <div className="p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between gap-3 animate-fadeIn">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-base text-amber-400">
+                    warning
+                  </span>
+                  <span>{fileError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFileError(null)}
+                  className="p-1 hover:text-white transition-colors"
+                >
+                  <span className="material-symbols-outlined text-sm">close</span>
+                </button>
+              </div>
+            )}
+
             {/* Active Sources Input Panels */}
             <div className="space-y-4 pt-2">
-              {/* PDF Dropzone */}
+              {/* PDF Documents Depot */}
               {selectedSources.includes("pdf") && (
                 <div className="p-5 rounded-2xl bg-surface-container/40 border border-outline-variant/30 space-y-3">
                   <div className="flex items-center justify-between">
@@ -310,46 +487,105 @@ function CreateQuizContent() {
                         description
                       </span>
                       Document &amp; Lecture Slides Depot
+                      <span className="font-label-code text-[11px] text-on-surface-variant ml-1 font-normal">
+                        ({pdfFiles.length}/2 documents)
+                      </span>
                     </span>
-                    <button
-                      type="button"
-                      onClick={handleSimulateDrop}
-                      className="text-[11px] text-primary hover:underline font-label-code"
-                    >
-                      + Add Sample Doc
-                    </button>
+
+                    {pdfFiles.length < 2 && (
+                      <button
+                        type="button"
+                        onClick={() => pdfInputRef.current?.click()}
+                        className="text-[11px] text-primary hover:underline font-label-code flex items-center gap-1 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-sm">add</span>
+                        <span>Browse Documents</span>
+                      </button>
+                    )}
                   </div>
+
+                  {/* Hidden Input */}
+                  <input
+                    ref={pdfInputRef}
+                    type="file"
+                    accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => e.target.files && handlePdfUpload(e.target.files)}
+                  />
+
+                  {/* Drag and Drop Zone */}
                   <div
-                    onClick={handleSimulateDrop}
-                    className="border-2 border-dashed border-outline-variant/50 hover:border-primary/60 rounded-xl p-5 text-center cursor-pointer bg-surface-container-low/40 hover:bg-surface-container-low transition-all group"
+                    onClick={() => pdfInputRef.current?.click()}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDraggingPdf(true);
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      setIsDraggingPdf(false);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDraggingPdf(false);
+                      if (e.dataTransfer.files) handlePdfUpload(e.dataTransfer.files);
+                    }}
+                    className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all group ${
+                      isDraggingPdf
+                        ? "border-primary bg-primary/10 shadow-lg"
+                        : "border-outline-variant/50 hover:border-primary/60 bg-surface-container-low/40 hover:bg-surface-container-low"
+                    }`}
                   >
                     <span className="material-symbols-outlined text-2xl text-primary group-hover:scale-110 transition-transform">
                       cloud_upload
                     </span>
                     <p className="text-xs font-medium text-on-surface mt-1.5">
-                      Drop lecture notes, PDF, or syllabus here, or click to upload
+                      Drop lecture notes, PDF, or syllabus here, or click to browse
                     </p>
                     <p className="text-[11px] text-on-surface-variant mt-0.5">
-                      Supports PDF, DOCX, TXT up to 50MB
+                      Supports PDF, DOCX, TXT up to 50MB per file (max 2 files)
                     </p>
-
-                    {/* Staged files */}
-                    {stagedFiles.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-2 justify-center">
-                        {stagedFiles.map((file, idx) => (
-                          <span
-                            key={idx}
-                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-highest border border-outline-variant/40 text-xs text-on-surface"
-                          >
-                            <span className="material-symbols-outlined text-sm text-primary">
-                              description
-                            </span>
-                            <span>{file}</span>
-                          </span>
-                        ))}
-                      </div>
-                    )}
                   </div>
+
+                  {/* Real Uploaded PDF Files List */}
+                  {pdfFiles.length > 0 && (
+                    <div className="space-y-2 pt-1">
+                      {pdfFiles.map((file, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between p-3 rounded-xl bg-surface-container-low border border-outline-variant/40 gap-3"
+                        >
+                          <div className="flex items-center gap-3 overflow-hidden">
+                            <div className="w-9 h-9 rounded-lg bg-primary-container/20 border border-primary/30 flex items-center justify-center shrink-0 text-primary">
+                              <span className="material-symbols-outlined text-lg">
+                                picture_as_pdf
+                              </span>
+                            </div>
+                            <div className="overflow-hidden">
+                              <p className="text-xs font-medium text-white truncate max-w-sm">
+                                {file.name}
+                              </p>
+                              <span className="text-[10px] text-on-surface-variant font-label-code">
+                                {formatFileSize(file.size)} • Ready for AI extraction
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemovePdf(idx);
+                            }}
+                            className="p-1 rounded-lg hover:bg-surface-container text-outline hover:text-error transition-colors shrink-0 cursor-pointer"
+                            title="Remove document"
+                          >
+                            <span className="material-symbols-outlined text-base">close</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -362,64 +598,211 @@ function CreateQuizContent() {
                         image
                       </span>
                       Images, Formulas &amp; Diagrams
+                      <span className="font-label-code text-[11px] text-on-surface-variant ml-1 font-normal">
+                        ({imageFiles.length}/5 images)
+                      </span>
                     </span>
-                    <button
-                      type="button"
-                      onClick={handleSimulateAddImage}
-                      className="text-[11px] text-tertiary hover:underline font-label-code"
-                    >
-                      + Add Sample Diagram
-                    </button>
+
+                    {imageFiles.length < 5 && (
+                      <button
+                        type="button"
+                        onClick={() => imageInputRef.current?.click()}
+                        className="text-[11px] text-tertiary hover:underline font-label-code flex items-center gap-1 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-sm">add</span>
+                        <span>Browse Images</span>
+                      </button>
+                    )}
                   </div>
+
+                  {/* Hidden Input */}
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/jpg"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => e.target.files && handleImageUpload(e.target.files)}
+                  />
+
+                  {/* Drag and Drop Zone */}
                   <div
-                    onClick={handleSimulateAddImage}
-                    className="border-2 border-dashed border-outline-variant/50 hover:border-tertiary/60 rounded-xl p-5 text-center cursor-pointer bg-surface-container-low/40 hover:bg-surface-container-low transition-all group"
+                    onClick={() => imageInputRef.current?.click()}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDraggingImage(true);
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      setIsDraggingImage(false);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDraggingImage(false);
+                      if (e.dataTransfer.files) handleImageUpload(e.dataTransfer.files);
+                    }}
+                    className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all group ${
+                      isDraggingImage
+                        ? "border-tertiary bg-tertiary/10 shadow-lg"
+                        : "border-outline-variant/50 hover:border-tertiary/60 bg-surface-container-low/40 hover:bg-surface-container-low"
+                    }`}
                   >
                     <span className="material-symbols-outlined text-2xl text-tertiary group-hover:scale-110 transition-transform">
                       add_photo_alternate
                     </span>
                     <p className="text-xs font-medium text-on-surface mt-1.5">
-                      Upload diagrams, formula sheets, whiteboard photos, or textbook pages
+                      Drop whiteboard photos, formula sheets, or diagrams here, or click to browse
                     </p>
                     <p className="text-[11px] text-on-surface-variant mt-0.5">
-                      Supports PNG, JPG, WEBP with OCR diagram parsing
+                      Supports PNG, JPG, JPEG, WEBP up to 20MB per image (max 5 images)
                     </p>
                   </div>
 
-                  {/* Staged Images Previews */}
-                  {stagedImages.length > 0 && (
+                  {/* Real Uploaded Images Previews */}
+                  {imageFiles.length > 0 && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                      {stagedImages.map((img, idx) => (
+                      {imageFiles.map((item, idx) => (
                         <div
                           key={idx}
                           className="flex items-center justify-between p-2.5 rounded-xl bg-surface-container-low border border-outline-variant/40 gap-3"
                         >
                           <div className="flex items-center gap-2.5 overflow-hidden">
-                            <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-outline-variant/30 bg-surface-container-lowest">
+                            <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 border border-outline-variant/30 bg-surface-container-lowest">
                               <img
-                                src={img.preview}
-                                alt={img.name}
+                                src={item.preview}
+                                alt={item.file.name}
                                 className="w-full h-full object-cover"
                               />
                             </div>
                             <div className="overflow-hidden">
-                              <p className="text-xs font-medium text-white truncate">
-                                {img.name}
+                              <p className="text-xs font-medium text-white truncate max-w-xs">
+                                {item.file.name}
                               </p>
                               <span className="text-[10px] text-on-surface-variant font-label-code">
-                                {img.size} • Ready for OCR
+                                {formatFileSize(item.file.size)} • Ready for OCR / Vision
                               </span>
                             </div>
                           </div>
                           <button
                             type="button"
-                            onClick={() => handleRemoveImage(idx)}
-                            className="p-1 rounded-lg hover:bg-surface-container text-outline hover:text-error transition-colors shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveImage(idx);
+                            }}
+                            className="p-1 rounded-lg hover:bg-surface-container text-outline hover:text-error transition-colors shrink-0 cursor-pointer"
                             title="Remove image"
                           >
-                            <span className="material-symbols-outlined text-base">
-                              close
-                            </span>
+                            <span className="material-symbols-outlined text-base">close</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Video Lecture Depot */}
+              {selectedSources.includes("video") && (
+                <div className="p-5 rounded-2xl bg-surface-container/40 border border-outline-variant/30 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-white flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-sm text-violet-400">
+                        video_library
+                      </span>
+                      Video Lecture &amp; Recording Depot
+                      <span className="font-label-code text-[11px] text-on-surface-variant ml-1 font-normal">
+                        ({videoFiles.length}/1 video)
+                      </span>
+                    </span>
+
+                    {videoFiles.length === 0 && (
+                      <button
+                        type="button"
+                        onClick={() => videoInputRef.current?.click()}
+                        className="text-[11px] text-violet-400 hover:underline font-label-code flex items-center gap-1 cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-sm">add</span>
+                        <span>Browse Video</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Hidden Input */}
+                  <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept="video/mp4,video/webm,video/quicktime,video/x-msvideo"
+                    className="hidden"
+                    onChange={(e) => e.target.files && handleVideoUpload(e.target.files)}
+                  />
+
+                  {/* Drag and Drop Zone */}
+                  <div
+                    onClick={() => videoInputRef.current?.click()}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDraggingVideo(true);
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      setIsDraggingVideo(false);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDraggingVideo(false);
+                      if (e.dataTransfer.files) handleVideoUpload(e.dataTransfer.files);
+                    }}
+                    className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all group ${
+                      isDraggingVideo
+                        ? "border-violet-400 bg-violet-500/10 shadow-lg"
+                        : "border-outline-variant/50 hover:border-violet-400/60 bg-surface-container-low/40 hover:bg-surface-container-low"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-2xl text-violet-400 group-hover:scale-110 transition-transform">
+                      movie
+                    </span>
+                    <p className="text-xs font-medium text-on-surface mt-1.5">
+                      Drop recorded lecture or video explanation clip here, or click to browse
+                    </p>
+                    <p className="text-[11px] text-on-surface-variant mt-0.5">
+                      Supports MP4, WebM, MOV, AVI up to 50MB (max 1 video)
+                    </p>
+                  </div>
+
+                  {/* Real Uploaded Video File */}
+                  {videoFiles.length > 0 && (
+                    <div className="space-y-2 pt-1">
+                      {videoFiles.map((file, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between p-3 rounded-xl bg-surface-container-low border border-outline-variant/40 gap-3"
+                        >
+                          <div className="flex items-center gap-3 overflow-hidden">
+                            <div className="w-10 h-10 rounded-lg bg-violet-500/20 border border-violet-500/30 flex items-center justify-center shrink-0 text-violet-400">
+                              <span className="material-symbols-outlined text-xl">
+                                play_circle
+                              </span>
+                            </div>
+                            <div className="overflow-hidden">
+                              <p className="text-xs font-medium text-white truncate max-w-sm">
+                                {file.name}
+                              </p>
+                              <span className="text-[10px] text-on-surface-variant font-label-code">
+                                {formatFileSize(file.size)} • Multi-modal Gemini Video Analysis
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveVideo();
+                            }}
+                            className="p-1 rounded-lg hover:bg-surface-container text-outline hover:text-error transition-colors shrink-0 cursor-pointer"
+                            title="Remove video"
+                          >
+                            <span className="material-symbols-outlined text-base">close</span>
                           </button>
                         </div>
                       ))}
@@ -447,7 +830,7 @@ function CreateQuizContent() {
                 </div>
               )}
 
-              {/* URL */}
+              {/* Web / URL */}
               {selectedSources.includes("url") && (
                 <div className="p-5 rounded-2xl bg-surface-container/40 border border-outline-variant/30 space-y-2">
                   <span className="text-xs font-semibold text-white flex items-center gap-1.5">

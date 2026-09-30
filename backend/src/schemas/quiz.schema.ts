@@ -14,6 +14,9 @@ export class Quiz {
   @Prop({ required: true })
   title!: string;
 
+  @Prop({ type: String, default: '' })
+  coverImage?: string;
+
   @Prop({ type: String, default: null })
   ownerId?: string;
 
@@ -28,6 +31,9 @@ export class Quiz {
 
   @Prop({ type: String, enum: ['LIVE', 'SCHEDULED', 'ANYTIME'], default: 'LIVE' })
   deploymentType?: 'LIVE' | 'SCHEDULED' | 'ANYTIME';
+
+  @Prop({ type: Boolean, default: false, index: true })
+  isDeployed?: boolean;
 
   @Prop({ type: String, enum: ['DRAFT', 'SCHEDULED', 'LIVE', 'ANYTIME', 'ENDED'], default: 'DRAFT' })
   status?: 'DRAFT' | 'SCHEDULED' | 'LIVE' | 'ANYTIME' | 'ENDED';

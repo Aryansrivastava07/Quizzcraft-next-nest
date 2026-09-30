@@ -9,16 +9,7 @@ export class ResetPassGuard implements CanActivate {
     ) { }
     canActivate(context: ExecutionContext): boolean {
         const request = context.switchToHttp().getRequest();
-        const authHeader = request.headers?.['authorization'] || request.headers?.['Authorization'];
-        const bearerToken = typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
-            ? authHeader.substring(7)
-            : null;
-        const token =
-            request.cookies?.RESET_PASS_TOKEN ||
-            bearerToken ||
-            request.headers?.['x-reset-pass-token'] ||
-            request.body?.resetToken ||
-            request.body?.RESET_PASS_TOKEN;
+        const token = request.cookies?.RESET_PASS_TOKEN;
         if (!token) {
             throw new UnauthorizedException('RESET_PASS_TOKEN not found');
         }

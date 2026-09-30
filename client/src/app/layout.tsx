@@ -4,6 +4,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "QuizzCraft.app • Interactive 3D Quiz Platform",
   description: "Turn Notes and PDFs into Interactive 3D Gamified Quizzes in Seconds.",
+  icons: {
+    icon: "/images/logo-icon.png",
+    shortcut: "/images/logo-icon.png",
+    apple: "/images/logo-icon.png",
+  },
 };
 
 import { AuthProvider } from "@/lib/auth/auth-context";
@@ -16,6 +21,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark scroll-smooth">
       <head>
+        <link rel="icon" href="/images/logo-icon.png" sizes="any" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link

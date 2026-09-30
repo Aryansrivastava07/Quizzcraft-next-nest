@@ -1,9 +1,11 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  OnModuleInit,
   UnauthorizedException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
@@ -23,15 +25,33 @@ import type { AiProvider } from '../ai/interfaces/ai-provider.interface';
 import { IAiGeneratedQuizResponse } from '../common/interfaces/quiz.interface'; // Renamed interface
 import { IQuiz } from '../common/interfaces/quiz-types.interface'; // New core interface
 import { Attempts } from '../schemas/attempts.schema';
+import { resolveQuizRelatedImage } from './utils/quiz-image.util';
 
 @Injectable()
-export class QuizService {
+export class QuizService implements OnModuleInit {
   constructor(
     @Inject('USER_MODEL') private UserModel: Model<User>,
     @Inject('QUIZ_MODEL') private QuizModel: Model<Quiz>,
     @Inject('ATTEMPTS_MODEL') private AttemptsModel: Model<Attempts>,
     @Inject(AI_PROVIDER) private ai: AiProvider,
   ) {}
+
+  async onModuleInit() {
+    try {
+      // 1. Ensure all quizzes with status DRAFT or without status are explicitly marked isDeployed: false
+      await this.QuizModel.updateMany(
+        { $or: [{ status: 'DRAFT' }, { status: { $exists: false } }, { status: null }] },
+        { $set: { isDeployed: false, status: 'DRAFT' } },
+      );
+      // 2. Ensure quizzes with status LIVE, SCHEDULED, ANYTIME, ENDED are marked isDeployed: true
+      await this.QuizModel.updateMany(
+        { status: { $in: ['LIVE', 'SCHEDULED', 'ANYTIME', 'ENDED'] }, isDeployed: { $ne: true } },
+        { $set: { isDeployed: true } },
+      );
+    } catch (e) {
+      // Migration error ignore
+    }
+  }
 
   async generateUniquePin(): Promise<string> {
     let pin = '';
@@ -55,10 +75,23 @@ export class QuizService {
     dto: generateQuizDto,
     owner?: { ownerId?: string; ownerEmail?: string },
   ): Promise<ServiceResponse<generateQuizResponseData>> {
-    // Return type remains the same
     try {
+      const fileNames: string[] = [
+        ...(dto.pdfs?.map((f) => f.originalname) || []),
+        ...(dto.images?.map((f) => f.originalname) || []),
+        ...(dto.videos?.map((f) => f.originalname) || []),
+      ];
+
+      if (!dto.prompt || !dto.prompt.trim()) {
+        if (fileNames.length > 0) {
+          dto.prompt = `Generate a high-yield, comprehensive educational quiz covering the key concepts, formulas, and facts presented in the attached materials: ${fileNames.join(', ')}.`;
+        } else {
+          dto.prompt = 'General Knowledge and Applied Science';
+        }
+      }
+
       const generatedQuiz: IAiGeneratedQuizResponse =
-        await this.ai.generateQuiz(dto); // Use new AI response interface
+        await this.ai.generateQuiz(dto);
       try {
         const questions = generatedQuiz.quiz.questions.map((question, idx) => {
           const rawLevel = String((question as any).level || (idx % 3 === 0 ? 'EASY' : idx % 3 === 1 ? 'MEDIUM' : 'HARD')).toUpperCase();
@@ -75,12 +108,21 @@ export class QuizService {
 
         const pin = await this.generateUniquePin();
 
+        // Resolve a topic-related image (Wikipedia / verified CDN preset; zero AI URL hallucinations)
+        const coverImage = await resolveQuizRelatedImage(
+          generatedQuiz.quiz.title,
+          dto.prompt,
+        );
+
         const newQuiz: IQuiz = {
           quizId: randomUUID(),
           pin,
           title: generatedQuiz.quiz.title,
+          coverImage,
           ownerId: owner?.ownerId,
           ownerEmail: owner?.ownerEmail,
+          isDeployed: false,
+          status: 'DRAFT',
           immediateResult: true,
           questime: 60,
           dynamicShuffle: true,
@@ -162,6 +204,12 @@ export class QuizService {
       }
     }
 
+    if (!quiz.coverImage) {
+      const resolved = await resolveQuizRelatedImage(quiz.title);
+      quiz.coverImage = resolved;
+      await quiz.save().catch(() => {});
+    }
+
     // 2. Check if Scheduled (not yet live)
     if (quiz.status === 'SCHEDULED' && quiz.scheduledFor && now < new Date(quiz.scheduledFor)) {
       return {
@@ -170,6 +218,7 @@ export class QuizService {
           isScheduled: true,
           quizId: quiz.quizId,
           title: quiz.title,
+          coverImage: quiz.coverImage || '',
           pin: quiz.pin,
           scheduledFor: quiz.scheduledFor,
           waitingCadetsCount: quiz.waitingList?.length || 0,
@@ -228,6 +277,12 @@ export class QuizService {
       throw new NotFoundException('No Quiz found for this Id');
     }
 
+    if (!quiz.coverImage) {
+      const resolved = await resolveQuizRelatedImage(quiz.title);
+      quiz.coverImage = resolved;
+      await quiz.save().catch(() => {});
+    }
+
     const attempts = await this.AttemptsModel.find({ quizId: quiz.quizId }).lean();
     const peopleAttempted = attempts.length;
     let totalPct = 0;
@@ -258,6 +313,7 @@ export class QuizService {
     quizId: string,
     updateData: {
       title?: string;
+      coverImage?: string;
       questions?: any[];
       immediateResult?: boolean;
       questime?: number;
@@ -273,6 +329,9 @@ export class QuizService {
     const setPayload: any = {};
     if (updateData.title !== undefined) {
       setPayload.title = updateData.title;
+    }
+    if (updateData.coverImage !== undefined) {
+      setPayload.coverImage = updateData.coverImage;
     }
     if (updateData.immediateResult !== undefined) {
       setPayload.immediateResult = updateData.immediateResult;
@@ -665,6 +724,7 @@ export class QuizService {
       { quizId },
       {
         $set: {
+          isDeployed: true,
           ownerId: userId,
           ownerEmail: user.email,
           deploymentType,
@@ -755,6 +815,11 @@ export class QuizService {
 
     const averageScore = completedCount > 0 ? Math.round(totalScoreSum / completedCount) : 0;
 
+    if (!quiz.coverImage) {
+      quiz.coverImage = await resolveQuizRelatedImage(quiz.title);
+      await quiz.save().catch(() => {});
+    }
+
     return {
       message: 'Admin telemetry loaded successfully',
       data: {
@@ -825,6 +890,317 @@ export class QuizService {
         quizId,
         status: 'ENDED',
         closed: true,
+      },
+    };
+  }
+
+  /**
+   * Fetch all deployed public quizzes for community discovery.
+   * STRICT FILTER: accessMode === 'PUBLIC' and status !== 'DRAFT'.
+   * Never returns questions or answers.
+   */
+  async getPublicQuizzes(query: {
+    search?: string;
+    status?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<ServiceResponse<{
+    quizzes: Array<{
+      quizId: string;
+      title: string;
+      pin?: string;
+      deploymentType?: string;
+      status?: string;
+      scheduledFor?: Date;
+      liveDurationMinutes?: number;
+      liveUntil?: Date;
+      questionsCount: number;
+      attemptsCount: number;
+      questime?: number;
+      createdAt?: Date;
+      creator: {
+        username: string;
+        fullName: string;
+        avatar: string;
+      };
+    }>;
+    total: number;
+    page: number;
+    limit: number;
+  }>> {
+    const page = Math.max(1, query.page || 1);
+    const limit = Math.min(50, Math.max(1, query.limit || 24));
+    const skip = (page - 1) * limit;
+
+    const filter: any = {
+      isDeployed: true,
+      accessMode: 'PUBLIC',
+      status: { $ne: 'DRAFT', $in: ['LIVE', 'SCHEDULED', 'ANYTIME', 'ENDED'] },
+    };
+
+    if (query.search && query.search.trim()) {
+      const q = query.search.trim();
+      filter.$or = [
+        { title: { $regex: q, $options: 'i' } },
+        { pin: q },
+      ];
+    }
+
+    if (query.status && query.status !== 'ALL') {
+      filter.status = query.status;
+    }
+
+    const [total, rawQuizzes] = await Promise.all([
+      this.QuizModel.countDocuments(filter),
+      this.QuizModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+    ]);
+
+    // Gather creator user details and attempts count in bulk
+    const ownerIds = rawQuizzes.map((q) => q.ownerId).filter(Boolean);
+    const quizIds = rawQuizzes.map((q) => q.quizId);
+
+    const [users, attemptCounts] = await Promise.all([
+      this.UserModel.find({ _id: { $in: ownerIds } })
+        .select('username fullName profilePicture')
+        .lean(),
+      this.AttemptsModel.aggregate([
+        { $match: { quizId: { $in: quizIds } } },
+        { $group: { _id: '$quizId', count: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const userMap = new Map(users.map((u) => [String(u._id), u]));
+    const countMap = new Map(attemptCounts.map((c) => [c._id, c.count]));
+
+    const quizzes = rawQuizzes.map((q: any) => {
+      const creator = q.ownerId ? userMap.get(String(q.ownerId)) : null;
+      return {
+        quizId: q.quizId,
+        title: q.title,
+        coverImage: q.coverImage || '',
+        pin: q.pin,
+        isDeployed: Boolean(q.isDeployed),
+        deploymentType: q.deploymentType,
+        status: q.status,
+        scheduledFor: q.scheduledFor,
+        liveDurationMinutes: q.liveDurationMinutes,
+        liveUntil: q.liveUntil,
+        questionsCount: Array.isArray(q.questions) ? q.questions.length : 0,
+        attemptsCount: countMap.get(q.quizId) || 0,
+        questime: q.questime || 60,
+        createdAt: q.createdAt,
+        creator: {
+          username: creator?.username || 'QuizzCraft Creator',
+          fullName: creator?.fullName || creator?.username || 'Creator',
+          avatar: creator?.profilePicture || '',
+        },
+      };
+    });
+
+    return {
+      message: 'Public deployed quizzes fetched successfully',
+      data: {
+        quizzes,
+        total,
+        page,
+        limit,
+      },
+    };
+  }
+
+  /**
+   * Fetch quiz review, statistics, and leaderboard.
+   * Access:
+   * - Public quizzes: Accessible to everyone.
+   * - Non-public quizzes: Accessible ONLY to quiz creator (ownerId === currentUserId).
+   * STRICT CONSTRAINT: No questions or answer keys are returned in the payload.
+   */
+  async getQuizReview(
+    quizId: string,
+    currentUserId?: string,
+  ): Promise<ServiceResponse<{
+    quiz: {
+      quizId: string;
+      title: string;
+      coverImage?: string;
+      pin?: string;
+      isDeployed?: boolean;
+      status?: string;
+      deploymentType?: string;
+      accessMode?: string;
+      scheduledFor?: Date;
+      liveDurationMinutes?: number;
+      liveUntil?: Date;
+      totalQuestions: number;
+      questime?: number;
+      createdAt?: Date;
+      antiCheat?: boolean;
+    };
+    owner: {
+      username: string;
+      fullName: string;
+      avatar: string;
+      isCurrentUser: boolean;
+    };
+    stats: {
+      totalAttempts: number;
+      completedAttempts: number;
+      activeAttempts: number;
+      averageScore: number;
+      highestScore: number;
+      lowestScore: number;
+      passRate: number;
+    };
+    leaderboard: Array<{
+      sessionId: string;
+      userId: string;
+      username: string;
+      fullName: string;
+      avatar: string;
+      score: number;
+      totalQuestions: number;
+      percentage: number;
+      isActive: boolean;
+      lastUpdateAt: string;
+    }>;
+    isOwner: boolean;
+    isPublic: boolean;
+    canAttempt: boolean;
+  }>> {
+    let quiz = await this.QuizModel.findOne({ quizId });
+    if (!quiz && quizId.length === 6 && /^\d+$/.test(quizId)) {
+      quiz = await this.QuizModel.findOne({ pin: quizId });
+    }
+    if (!quiz) {
+      throw new NotFoundException('Quiz not found');
+    }
+
+    const isOwner = Boolean(
+      currentUserId && quiz.ownerId && String(quiz.ownerId) === String(currentUserId),
+    );
+    const isPublic = quiz.accessMode === 'PUBLIC';
+
+    // Access control: Only quiz creator or public if quiz is public
+    if (!isPublic && !isOwner) {
+      throw new ForbiddenException(
+        'This quiz review is private. Only the quiz creator has permission to view this review.',
+      );
+    }
+
+    // Fetch all attempts for this quiz
+    const attempts = await this.AttemptsModel.find({ quizId: quiz.quizId }).lean();
+    const totalAttempts = attempts.length;
+    const activeAttempts = attempts.filter((a) => a.isActive).length;
+
+    // Fetch user details for attempts
+    const userIds = attempts.map((a) => a.userId).filter(Boolean);
+    const [users, creator] = await Promise.all([
+      this.UserModel.find({ _id: { $in: userIds } })
+        .select('username fullName profilePicture email xp')
+        .lean(),
+      quiz.ownerId
+        ? this.UserModel.findById(quiz.ownerId)
+            .select('username fullName profilePicture')
+            .lean()
+        : null,
+    ]);
+
+    const userMap = new Map(users.map((u) => [String(u._id), u]));
+
+    const totalQuestions = quiz.questions?.length || 0;
+    let completedCount = 0;
+    let totalScoreSum = 0;
+    const numericScores: number[] = [];
+
+    const leaderboard = attempts
+      .map((attempt) => {
+        const cadet = userMap.get(String(attempt.userId));
+        const score = typeof attempt.score === 'number' ? attempt.score : 0;
+        const percentage = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
+
+        if (!attempt.isActive && typeof attempt.score === 'number') {
+          totalScoreSum += percentage;
+          completedCount++;
+          numericScores.push(score);
+        }
+
+        return {
+          sessionId: attempt.sessionId,
+          userId: attempt.userId,
+          username: cadet?.username || 'Cadet Pilot',
+          fullName: cadet?.fullName || cadet?.username || 'Cadet Pilot',
+          avatar: cadet?.profilePicture || '',
+          score,
+          totalQuestions,
+          percentage,
+          isActive: attempt.isActive,
+          lastUpdateAt: attempt.lastUpdateAt,
+        };
+      })
+      .sort((a, b) => b.score - a.score || b.percentage - a.percentage);
+
+    const averageScore = completedCount > 0 ? Math.round(totalScoreSum / completedCount) : 0;
+    const highestScore = numericScores.length > 0 ? Math.max(...numericScores) : 0;
+    const lowestScore = numericScores.length > 0 ? Math.min(...numericScores) : 0;
+    const passThreshold = totalQuestions * 0.5;
+    const passedCount = numericScores.filter((s) => s >= passThreshold).length;
+    const passRate = completedCount > 0 ? Math.round((passedCount / completedCount) * 100) : 0;
+
+    const canAttempt =
+      quiz.status === 'LIVE' ||
+      quiz.status === 'ANYTIME' ||
+      (quiz.status === 'SCHEDULED' && quiz.scheduledFor && new Date() >= new Date(quiz.scheduledFor));
+
+    let coverImage = quiz.coverImage;
+    if (!coverImage) {
+      coverImage = await resolveQuizRelatedImage(quiz.title);
+      quiz.coverImage = coverImage;
+      await quiz.save().catch(() => {});
+    }
+
+    return {
+      message: 'Quiz review loaded successfully',
+      data: {
+        quiz: {
+          quizId: quiz.quizId,
+          title: quiz.title,
+          coverImage: coverImage || '',
+          pin: quiz.pin,
+          isDeployed: Boolean(quiz.isDeployed),
+          status: quiz.status,
+          deploymentType: quiz.deploymentType,
+          accessMode: quiz.accessMode,
+          scheduledFor: quiz.scheduledFor,
+          liveDurationMinutes: quiz.liveDurationMinutes,
+          liveUntil: quiz.liveUntil,
+          totalQuestions, // Count ONLY - NO questions array!
+          questime: quiz.questime,
+          createdAt: (quiz as any).createdAt,
+          antiCheat: quiz.antiCheat,
+        },
+        owner: {
+          username: creator?.username || 'QuizzCraft Creator',
+          fullName: creator?.fullName || creator?.username || 'Creator',
+          avatar: creator?.profilePicture || '',
+          isCurrentUser: isOwner,
+        },
+        stats: {
+          totalAttempts,
+          completedAttempts: completedCount,
+          activeAttempts,
+          averageScore,
+          highestScore,
+          lowestScore,
+          passRate,
+        },
+        leaderboard,
+        isOwner,
+        isPublic,
+        canAttempt: Boolean(canAttempt),
       },
     };
   }

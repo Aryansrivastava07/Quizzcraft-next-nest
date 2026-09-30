@@ -18,23 +18,26 @@ export const getFilesFromDto = async (
   const uploadsDir = path.join(process.cwd(), 'uploads');
   await fs.mkdir(uploadsDir, { recursive: true });
 
-  const filePromises = fileContents.map(async (fileContent) => {
+  const filePromises = fileContents.map(async (fileContent: any) => {
+    const safeName = (fileContent.originalname || 'upload').replace(/[^a-zA-Z0-9._-]/g, '_');
     const filePath = path.join(
       uploadsDir,
-      `${randomUUID()}-${fileContent.originalname}`,
+      `${randomUUID()}-${safeName}`,
     );
 
-    await fs.writeFile(filePath, fileContent.buffer);
+    if (fileContent.buffer) {
+      await fs.writeFile(filePath, fileContent.buffer);
+    } else if (fileContent.path) {
+      await fs.copyFile(fileContent.path, filePath);
+    }
 
     const determinedMimeType =
-      mime.getType(fileContent.originalname) || fileContent.mimetype;
+      (fileContent.mimetype && fileContent.mimetype !== 'application/octet-stream')
+        ? fileContent.mimetype
+        : mime.getType(fileContent.originalname) || fileContent.mimetype || 'application/octet-stream';
 
     return {
       path: filePath,
-      // mimetype:
-      //   fileContent.mimetype == 'application/octet-stream'
-      //     ? `application/${fileContent.originalname.split('.')[fileContent.originalname.split('.').length - 1]}`
-      //     : fileContent.mimetype,
       mimetype: determinedMimeType,
     };
   });

@@ -47,6 +47,15 @@ export default function Navbar({ activeChapter }: NavbarProps) {
       isActive: activeChapter === "how-it-works",
     },
     {
+      href: "/quizzes",
+      label: "Explore Arenas",
+      icon: "explore",
+      isActive:
+        pathname === "/quizzes" ||
+        pathname === "/explore" ||
+        pathname?.startsWith("/quiz/review"),
+    },
+    {
       href: "/create",
       label: "Create Quiz",
       icon: "add_circle",
@@ -74,10 +83,12 @@ export default function Navbar({ activeChapter }: NavbarProps) {
         {/* Left: Company Logo */}
         <div className="flex items-center">
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="w-8 h-8 rounded-full bg-primary-container border border-white/15 flex items-center justify-center shadow-md shadow-primary-container/20 group-hover:scale-105 transition-transform">
-              <span className="material-symbols-outlined text-white text-base">
-                bolt
-              </span>
+            <div className="w-8 h-8 rounded-xl overflow-hidden border border-white/15 flex items-center justify-center shadow-md shadow-primary-container/20 group-hover:scale-105 group-hover:border-primary/50 transition-all duration-300 bg-surface-container-high shrink-0">
+              <img
+                src="/images/logo-icon.png"
+                alt="QuizzCraft Logo"
+                className="w-full h-full object-cover"
+              />
             </div>
             <span className="text-headline-sm font-headline-sm tracking-tight text-white font-extrabold text-base sm:text-lg">
               QuizzCraft<span className="text-tertiary">.app</span>

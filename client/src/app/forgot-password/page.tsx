@@ -210,11 +210,12 @@ function ForgotPasswordContent() {
       {/* Header */}
       <header className="relative z-20 w-full max-w-[1280px] mx-auto px-4 sm:px-8 pt-6 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-3 group">
-          <div className="w-10 h-10 rounded-xl bg-surface-container-high border border-outline-variant/40 flex items-center justify-center relative overflow-hidden shadow-lg shadow-primary-container/10 group-hover:border-primary transition-colors duration-300">
-            <div className="absolute inset-0 bg-gradient-to-tr from-primary-container/30 to-tertiary/20" />
-            <span className="material-symbols-outlined text-primary relative z-10 text-xl">
-              bolt
-            </span>
+          <div className="w-10 h-10 rounded-xl overflow-hidden border border-outline-variant/40 flex items-center justify-center relative shadow-lg shadow-primary-container/10 group-hover:border-primary transition-all duration-300 group-hover:scale-105 bg-surface-container-high shrink-0">
+            <img
+              src="/images/logo-icon.png"
+              alt="QuizzCraft Logo"
+              className="w-full h-full object-cover"
+            />
           </div>
           <span className="font-headline-sm text-base text-primary font-extrabold tracking-tight">
             QuizzCraft<span className="text-tertiary">.app</span>

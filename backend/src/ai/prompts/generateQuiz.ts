@@ -128,8 +128,11 @@ ${difficultyGuidance}
 ${formatGuidance}
 
 **Core Pedagogical Rules:**
-1. **Factual Integrity:** Every question and answer must be strictly accurate, unambiguous, and rooted in established science/facts.
-2. **Explanations:** Each question MUST include a concise, high-value "explanation" explaining why the correct answer is true and clarifying any common misjudgments.
+1. **Multimodal Media Grounding:**
+   - If documents (PDFs, notes), diagrams/images, or video files are attached with this request, analyze their full visual, textual, mathematical, and conceptual contents thoroughly.
+   - Ground the questions directly in the facts, formulas, principles, architectures, and diagrams presented in the attached files.
+2. **Factual Integrity:** Every question and answer must be strictly accurate, unambiguous, and rooted in established science/facts.
+3. **Explanations:** Each question MUST include a concise, high-value "explanation" explaining why the correct answer is true and clarifying any common misjudgments.
 3. **Question Metadata:**
    - "level": Must be exactly "EASY", "MEDIUM", or "HARD".
    - "xp": Must be 100 for EASY, 200 for MEDIUM, or 300 for HARD.
