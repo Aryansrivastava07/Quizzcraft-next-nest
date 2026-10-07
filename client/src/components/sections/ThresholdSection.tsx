@@ -109,7 +109,7 @@ export default function ThresholdSection() {
                     </span>
                   </div>
                   <div className="w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
-                    <div className="bg-gradient-to-r from-primary to-tertiary h-full w-full rounded-full transition-all duration-700" />
+                    <div className="bg-primary h-full w-full rounded-full transition-all duration-700" />
                   </div>
                 </div>
               </div>
@@ -129,7 +129,7 @@ export default function ThresholdSection() {
                     </span>
                   </div>
                   <div className="w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
-                    <div className="bg-gradient-to-r from-tertiary to-secondary h-full w-full rounded-full transition-all duration-700" />
+                    <div className="bg-tertiary h-full w-full rounded-full transition-all duration-700" />
                   </div>
                 </div>
               </div>
@@ -149,7 +149,7 @@ export default function ThresholdSection() {
                     </span>
                   </div>
                   <div className="w-full bg-surface-container-highest rounded-full h-1.5 overflow-hidden">
-                    <div className="bg-gradient-to-r from-secondary to-amber-accent h-full w-full rounded-full transition-all duration-700" />
+                    <div className="bg-amber-accent h-full w-full rounded-full transition-all duration-700" />
                   </div>
                 </div>
               </div>

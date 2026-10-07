@@ -17,6 +17,14 @@ export class LoginAuthDto {
 
       @IsNotEmpty()
       password!: string;
+
+      @IsString()
+      @IsOptional()
+      orgId?: string;
+
+      @IsString()
+      @IsOptional()
+      orgSlug?: string;
 }
 
 export class RegisterAuthDto {
@@ -52,6 +60,14 @@ export class RegisterAuthDto {
       @IsNumber()
       @IsOptional()
       mobileNo?: number;
+
+      @IsString()
+      @IsOptional()
+      orgId?: string;
+
+      @IsString()
+      @IsOptional()
+      groupCode?: string;
 }
 
 export class LogoutAuthDto {

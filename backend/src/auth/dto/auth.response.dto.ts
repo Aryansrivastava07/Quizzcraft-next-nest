@@ -5,6 +5,11 @@ export class RegisterAuthResponseDto {
       fullName?: string;
       institution?: string;
       phoneNumber?: string;
+      role?: string;
+      orgId?: string | null;
+      orgSlug?: string | null;
+      isSuperAdmin?: boolean;
+      groupIds?: string[];
 }
 
 export class LoginAuthResponseDto {
@@ -17,6 +22,11 @@ export class LoginAuthResponseDto {
       fullName?: string;
       institution?: string;
       phoneNumber?: string;
+      role?: string;
+      orgId?: string | null;
+      orgSlug?: string | null;
+      isSuperAdmin?: boolean;
+      groupIds?: string[];
 }
 
 export class MeAuthResponseDto {
@@ -29,5 +39,10 @@ export class MeAuthResponseDto {
       fullName?: string;
       institution?: string;
       phoneNumber?: string;
+      role?: string;
+      orgId?: string | null;
+      orgSlug?: string | null;
+      isSuperAdmin?: boolean;
+      groupIds?: string[];
 }
 

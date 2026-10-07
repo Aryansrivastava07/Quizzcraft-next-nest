@@ -68,7 +68,7 @@ export default function PublicQuizzesPage() {
 
   // Filtered Quizzes (Strictly deployed and not in draft)
   const deployedQuizzes = useMemo(() => {
-    return quizzes.filter((q) => q.isDeployed === true && q.status !== "DRAFT");
+    return quizzes.filter((q) => q.isDeployed !== false && q.status !== "DRAFT");
   }, [quizzes]);
 
   const filteredQuizzes = useMemo(() => {
@@ -119,7 +119,7 @@ export default function PublicQuizzesPage() {
             </div>
             
             <h1 className="text-3xl sm:text-5xl font-headline-sm font-extrabold text-white tracking-tight leading-tight mb-4">
-              Explore & Battle in <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-blue-400 to-tertiary">Community Arenas</span>
+              Explore & Battle in <span className="text-primary">Community Arenas</span>
             </h1>
             
             <p className="text-sm sm:text-base text-on-surface-variant font-body-md leading-relaxed">
@@ -416,7 +416,7 @@ export default function PublicQuizzesPage() {
 
                       {/* Creator Info */}
                       <div className="flex items-center gap-2.5 mb-6 text-xs text-on-surface-variant border-t border-white/5 pt-3">
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-primary to-tertiary flex items-center justify-center text-white text-[10px] font-bold uppercase overflow-hidden shrink-0">
+                        <div className="w-6 h-6 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center text-primary text-[10px] font-bold uppercase overflow-hidden shrink-0">
                           {quiz.creator?.avatar ? (
                             <img src={quiz.creator.avatar} alt="" className="w-full h-full object-cover" />
                           ) : (

@@ -6,6 +6,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  OnModuleInit,
   UnauthorizedException,
 } from '@nestjs/common';
 import {
@@ -41,13 +42,28 @@ import { RedisService } from '../redis/redis.service';
 import { MailService } from '../mail/mail.service';
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
   constructor(
     @Inject('USER_MODEL') private UserModel: Model<User>,
+    @Inject('ORGANIZATION_MODEL') private OrgModel: Model<any>,
+    @Inject('GROUP_MODEL') private GroupModel: Model<any>,
     private readonly redisService: RedisService,
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
   ) {}
+
+  async onModuleInit() {
+    try {
+      const indexes = await this.UserModel.collection.indexes();
+      if (indexes.some((i) => i.name === 'mobileNo_1')) {
+        await this.UserModel.collection.dropIndex('mobileNo_1');
+        console.log('[AuthService] Successfully dropped obsolete mobileNo_1 index.');
+      }
+    } catch {
+      // Index already dropped or not present
+    }
+  }
+
   private getSalt(): number {
     return Number(this.configService.get<number>('SALT'));
   }
@@ -85,6 +101,14 @@ export class AuthService {
   async me(dto: MeAuthDto): Promise<ServiceResponse<MeResponseData>> {
     const user = await this.UserModel.findById(dto.userId);
     if (!user) throw new UnauthorizedException('Invalid session');
+
+    if (user.orgId && !user.orgSlug) {
+      const org = await this.OrgModel.findOne({ orgId: user.orgId }).select('slug').lean();
+      if (org) {
+        user.orgSlug = org.slug;
+        await user.save().catch(() => {});
+      }
+    }
 
     return {
       message: 'User found',
@@ -162,18 +186,69 @@ export class AuthService {
       ? Number(rawPhone.replace(/\D/g, '')) || undefined
       : dto.mobileNo || undefined;
 
+    let resolvedOrgId: string | null = null;
+    let resolvedOrgSlug: string | null = null;
+    let initialRole: 'PUBLIC_USER' | 'ORG_STD' = 'PUBLIC_USER';
+    const initialGroupIds: string[] = [];
+
+    if (dto.orgId) {
+      const orgQuery = dto.orgId.trim();
+      const org = await this.OrgModel.findOne({
+        $or: [{ orgId: orgQuery }, { slug: orgQuery.toLowerCase() }],
+      });
+      if (org) {
+        resolvedOrgId = org.orgId;
+        resolvedOrgSlug = org.slug;
+        initialRole = 'ORG_STD';
+      }
+    }
+
+    if (dto.groupCode) {
+      const codeQuery = dto.groupCode.trim().toUpperCase();
+      const group = await this.GroupModel.findOne({ code: codeQuery });
+      if (group) {
+        if (!resolvedOrgId) {
+          resolvedOrgId = group.orgId;
+          const parentOrg = await this.OrgModel.findOne({ orgId: group.orgId });
+          if (parentOrg) resolvedOrgSlug = parentOrg.slug;
+          initialRole = 'ORG_STD';
+        }
+        if (!group.isLocked && !group.requireApproval) {
+          initialGroupIds.push(group.groupId);
+        }
+      }
+    }
+
     try {
       const OTP = Math.floor(100000 + Math.random() * 900000).toString();
-      const createdUser = await this.UserModel.create({
+      const userPayload: any = {
         ...dto,
         fullName: dto.fullName?.trim() || '',
         institution: dto.institution?.trim() || '',
         phoneNumber: rawPhone,
-        mobileNo: parsedMobileNo,
         email: normalizedEmail,
         emails: [normalizedEmail],
         password: hashedPassword,
-      });
+        role: initialRole,
+        orgId: resolvedOrgId,
+        orgSlug: resolvedOrgSlug,
+        groupIds: initialGroupIds,
+      };
+
+      if (parsedMobileNo !== undefined) {
+        userPayload.mobileNo = parsedMobileNo;
+      } else {
+        delete userPayload.mobileNo;
+      }
+
+      const createdUser = await this.UserModel.create(userPayload);
+
+      if (initialGroupIds.length > 0 && dto.groupCode) {
+        await this.GroupModel.updateOne(
+          { code: dto.groupCode.trim().toUpperCase() },
+          { $addToSet: { memberIds: String(createdUser._id) } },
+        );
+      }
       const hashedOTP = await hashPassword(OTP, this.getSalt());
       const cacheKey = `reg-otp-${createdUser.email}`;
       await this.redisService.set(cacheKey, hashedOTP, 1000 * 60 * 2);
@@ -207,6 +282,41 @@ export class AuthService {
     // Ensure user has emails array populated
     if (!user.emails || user.emails.length === 0) {
       user.emails = [user.email];
+    }
+
+    if (user.orgId && !user.orgSlug) {
+      const org = await this.OrgModel.findOne({ orgId: user.orgId }).select('slug').lean();
+      if (org) {
+        user.orgSlug = org.slug;
+      }
+    }
+
+    // Auto-join organization on login if requested via invite / portal route
+    const targetOrgIdentifier = (dto.orgSlug || dto.orgId || '').toLowerCase().trim();
+    if (targetOrgIdentifier) {
+      const targetOrg = await this.OrgModel.findOne({
+        $or: [{ slug: targetOrgIdentifier }, { orgId: targetOrgIdentifier }],
+      });
+      if (targetOrg && targetOrg.status === 'ACTIVE') {
+        const memberCount = await this.UserModel.countDocuments({ orgId: targetOrg.orgId });
+        const seatsAvailable = memberCount < targetOrg.maxSeats;
+
+        let domainMatches = true;
+        if (targetOrg.allowedEmailDomain) {
+          const domain = targetOrg.allowedEmailDomain.toLowerCase().replace(/^@/, '').trim();
+          const allUserEmails = [user.email, ...(user.emails || [])].map((e) => e.toLowerCase().trim());
+          domainMatches = allUserEmails.some((e) => e.endsWith(`@${domain}`));
+        }
+
+        if (seatsAvailable && domainMatches) {
+          user.orgId = targetOrg.orgId;
+          user.orgSlug = targetOrg.slug;
+          if (!user.role || user.role === 'PUBLIC_USER') {
+            user.role = 'ORG_STD';
+          }
+          user.institution = targetOrg.name;
+        }
+      }
     }
 
     const { accessToken, refreshToken, hashedRefreshToken } =

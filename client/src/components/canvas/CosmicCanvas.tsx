@@ -262,8 +262,8 @@ export default function CosmicCanvas() {
 
   return (
     <div
-      className={`fixed inset-0 pointer-events-none z-0 overflow-hidden transition-all duration-[1400ms] ease-out ${
-        mounted ? "opacity-100 scale-100 filter-none" : "opacity-0 scale-[1.03] blur-[3px]"
+      className={`fixed inset-0 pointer-events-none z-0 overflow-hidden transition-opacity duration-500 ease-out ${
+        mounted ? "opacity-100" : "opacity-0"
       }`}
     >
       {/* Real-Time 3D Starfield Warp Canvas (Deep-Space Traversal) */}

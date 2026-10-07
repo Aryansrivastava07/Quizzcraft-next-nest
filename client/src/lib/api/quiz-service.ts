@@ -91,6 +91,15 @@ export const quizService = {
     data: {
       title?: string;
       coverImage?: string;
+      accessMode?: "PUBLIC" | "PRIVATE" | "ORGANIZATION";
+      organizationDomain?: string;
+      antiCheat?: boolean;
+      fullScreenLock?: boolean;
+      shuffleChoices?: boolean;
+      allowRetries?: boolean;
+      deploymentType?: "LIVE" | "SCHEDULED" | "ANYTIME";
+      isDeployed?: boolean;
+      status?: "DRAFT" | "SCHEDULED" | "LIVE" | "ANYTIME" | "ENDED";
       questions?: any[];
       immediateResult?: boolean;
       questime?: number;
@@ -209,14 +218,25 @@ export const quizService = {
   },
 
   /**
+   * Get quizzes created by the authenticated user
+   */
+  async getUserQuizzes() {
+    return apiClient<{ quizzes: Quiz[] }>(API_ROUTES.profile.quizzes, {
+      method: "GET",
+    });
+  },
+
+  /**
    * Deploy a quiz with protocol (LIVE, SCHEDULED, ANYTIME) and access controls
    */
   async deployQuiz(
     quizId: string,
     payload: {
-      deploymentType: "LIVE" | "SCHEDULED" | "ANYTIME";
+      deploymentType?: "LIVE" | "SCHEDULED" | "ANYTIME";
       accessMode?: "PUBLIC" | "PRIVATE" | "ORGANIZATION";
       organizationDomain?: string;
+      groupId?: string;
+      dueDate?: string;
       scheduledFor?: string;
       liveDurationMinutes?: number;
       antiCheat?: boolean;

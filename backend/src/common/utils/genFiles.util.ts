@@ -3,27 +3,30 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import mime from 'mime';
 
-// New interface for the return type of getFilesFromDto
 export interface UploadedFileWithMime {
   path: string;
   mimetype: string;
+  originalname: string;
+  publicUrl: string;
+  category: 'image' | 'video' | 'pdf';
 }
+
 export const getFilesFromDto = async (
   fileContents: any,
+  category: 'image' | 'video' | 'pdf' = 'image',
 ): Promise<UploadedFileWithMime[]> => {
   if (!fileContents || fileContents.length === 0) {
     return [];
   }
 
-  const uploadsDir = path.join(process.cwd(), 'uploads');
+  const uploadsDir = path.join(process.cwd(), 'uploads', 'quiz');
   await fs.mkdir(uploadsDir, { recursive: true });
 
   const filePromises = fileContents.map(async (fileContent: any) => {
-    const safeName = (fileContent.originalname || 'upload').replace(/[^a-zA-Z0-9._-]/g, '_');
-    const filePath = path.join(
-      uploadsDir,
-      `${randomUUID()}-${safeName}`,
-    );
+    const rawName = fileContent.originalname || `upload-${category}`;
+    const safeName = rawName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const fileName = `${randomUUID()}-${safeName}`;
+    const filePath = path.join(uploadsDir, fileName);
 
     if (fileContent.buffer) {
       await fs.writeFile(filePath, fileContent.buffer);
@@ -32,13 +35,16 @@ export const getFilesFromDto = async (
     }
 
     const determinedMimeType =
-      (fileContent.mimetype && fileContent.mimetype !== 'application/octet-stream')
+      fileContent.mimetype && fileContent.mimetype !== 'application/octet-stream'
         ? fileContent.mimetype
-        : mime.getType(fileContent.originalname) || fileContent.mimetype || 'application/octet-stream';
+        : mime.getType(rawName) || fileContent.mimetype || 'application/octet-stream';
 
     return {
       path: filePath,
       mimetype: determinedMimeType,
+      originalname: rawName,
+      publicUrl: `/uploads/quiz/${fileName}`,
+      category,
     };
   });
 

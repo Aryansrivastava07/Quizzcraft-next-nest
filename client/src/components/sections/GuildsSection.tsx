@@ -38,15 +38,15 @@ const personas: PersonaItem[] = [
     href: "/create",
   },
   {
-    icon: "domain",
+    icon: "corporate_fare",
     iconBg: "bg-secondary-container/20 border-secondary/30 text-secondary",
     iconColor: "text-secondary",
-    badge: "TEAMS & ENTERPRISE",
+    badge: "ENTERPRISE & ACADEMIA",
     badgeColor: "text-secondary",
-    title: "For Team Leads",
+    title: "For Institutions & Orgs",
     description:
-      "Make onboarding and compliance training engaging with competitive live sessions, team streaks, and real-time completion tracking.",
-    href: "/create",
+      "Deploy private student cohorts, enforce anti-cheat proctoring, manage partner roles, and track real-time automated gradebooks.",
+    href: "/institutions",
   },
 ];
 
@@ -111,7 +111,7 @@ export default function GuildsSection() {
                   href={item.href}
                   className={`text-xs flex items-center gap-1 font-semibold group-hover:translate-x-1.5 transition-transform ${item.badgeColor}`}
                 >
-                  <span>Get Started</span>
+                  <span>{item.href === "/institutions" ? "Explore Benefits" : "Get Started"}</span>
                   <span className="material-symbols-outlined text-sm">arrow_forward</span>
                 </Link>
               </div>
@@ -119,6 +119,36 @@ export default function GuildsSection() {
           </ParallaxReveal>
         ))}
       </div>
+
+      {/* Dedicated Institutional Benefits Card */}
+      <ParallaxReveal direction="up" distance={30} delay={300} duration={800} className="mt-8">
+        <div className="rounded-3xl bg-gradient-to-r from-primary/10 via-[#0b0e1b]/90 to-primary-container/20 border border-primary/30 p-6 sm:p-8 backdrop-blur-2xl flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-2xl">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-primary/20 border border-primary/40 flex items-center justify-center text-primary shrink-0 shadow-lg">
+              <span className="material-symbols-outlined text-2xl">corporate_fare</span>
+            </div>
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/20 border border-primary/30 text-primary text-[10px] font-bold uppercase tracking-wider mb-1.5">
+                <span>Institutional Suite</span>
+              </div>
+              <h3 className="text-lg sm:text-xl font-bold text-white">
+                Looking for Private Cohorts &amp; Exam Proctoring for Your Organization?
+              </h3>
+              <p className="text-xs sm:text-sm text-on-surface-variant mt-1 max-w-2xl leading-relaxed">
+                Empower your faculty or training staff with dedicated slug portals, anti-cheat live testing, automated gradebooks, and collaborative student discussion rooms.
+              </p>
+            </div>
+          </div>
+
+          <Link
+            href="/institutions"
+            className="shrink-0 px-5 py-3 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white text-xs font-semibold shadow-lg shadow-primary/25 hover:scale-[1.03] active:scale-95 transition-all flex items-center gap-2 cursor-pointer border border-white/10"
+          >
+            <span>Explore Organization Benefits</span>
+            <span className="material-symbols-outlined text-sm">arrow_forward</span>
+          </Link>
+        </div>
+      </ParallaxReveal>
     </section>
   );
 }

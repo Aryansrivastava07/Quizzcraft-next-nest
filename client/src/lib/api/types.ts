@@ -21,7 +21,6 @@ export interface BackendErrorResponse {
   method: string;
 }
 
-// ==================== AUTH TYPES ====================
 export interface RegisterAuthDto {
   username: string;
   email: string;
@@ -29,11 +28,15 @@ export interface RegisterAuthDto {
   fullName?: string;
   phoneNumber?: string;
   institution?: string;
+  orgId?: string;
+  groupCode?: string;
 }
 
 export interface LoginAuthDto {
   email: string;
   password: string;
+  orgId?: string;
+  orgSlug?: string;
 }
 
 export interface VerifyOTPAuthDto {
@@ -67,10 +70,23 @@ export interface UserMe {
   averageScore?: number;
   quizAttempted?: number;
   xp?: number;
+  role?: "PUBLIC_USER" | "SUPER_ADMIN" | "ORG_ADMIN" | "ORG_PARTNER" | "ORG_STD" | "ORG_USER";
+  orgId?: string;
+  orgSlug?: string;
+  isSuperAdmin?: boolean;
+  groupIds?: string[];
   createdAt?: string;
 }
 
-// ==================== QUIZ TYPES ====================
+export interface QuizQuestionReference {
+  type?: "IMAGE" | "VIDEO_FRAME" | "PDF_PAGE" | "WEB_SOURCE" | "VERIFIED_CDN";
+  mediaUrl?: string;
+  caption?: string;
+  timestamp?: string;
+  pageNumber?: number;
+  sourceName?: string;
+}
+
 export interface QuizQuestion {
   questionId: string;
   question: string;
@@ -79,6 +95,7 @@ export interface QuizQuestion {
   explanation: string;
   level?: "EASY" | "MEDIUM" | "HARD" | string;
   xp?: number;
+  reference?: QuizQuestionReference;
 }
 
 export interface QuizStats {
@@ -104,6 +121,9 @@ export interface Quiz {
   scheduledAlertSent?: boolean;
   waitingList?: string[];
   isPractice?: boolean;
+  orgId?: string;
+  groupId?: string;
+  dueDate?: string;
   antiCheat?: boolean;
   fullScreenLock?: boolean;
   shuffleChoices?: boolean;
@@ -285,5 +305,140 @@ export interface QuizReviewData {
   isOwner: boolean;
   isPublic: boolean;
   canAttempt: boolean;
+}
+
+// ==================== ORGANIZATION TYPES ====================
+export interface Organization {
+  orgId: string;
+  name: string;
+  slug: string;
+  ownerId: string;
+  allowedEmailDomain?: string;
+  logoUrl?: string;
+  status: "ACTIVE" | "PENDING" | "SUSPENDED";
+  maxSeats: number;
+  currentSeats: number;
+  createdAt?: string;
+}
+
+export interface RegisterOrgDto {
+  name: string;
+  slug: string;
+  allowedEmailDomain?: string;
+  adminUsername: string;
+  adminEmail: string;
+  adminPassword: string;
+  adminFullName?: string;
+}
+
+export interface OrgMember {
+  userId: string;
+  email: string;
+  username: string;
+  fullName?: string;
+  role: "SUPER_ADMIN" | "ORG_ADMIN" | "ORG_PARTNER" | "ORG_STD" | "ORG_USER";
+  profilePicture?: string;
+  joinedAt?: string;
+  groupIds?: string[];
+}
+
+export interface SuperAdminStats {
+  totalOrgs: number;
+  totalUsers: number;
+  totalPublicUsers: number;
+  totalOrgUsers: number;
+  totalQuizzes: number;
+  totalAttempts: number;
+}
+
+// ==================== GROUP TYPES ====================
+export interface Group {
+  groupId: string;
+  orgId?: string | null;
+  accessMode?: "PUBLIC" | "ORGANIZATION";
+  name: string;
+  description?: string;
+  code: string;
+  creatorId: string;
+  memberIds: string[];
+  pendingMemberIds: string[];
+  memberCount?: number;
+  quizCount?: number;
+  isLocked: boolean;
+  requireApproval: boolean;
+  isMember?: boolean;
+  isCreator?: boolean;
+  creator?: {
+    username: string;
+    fullName?: string;
+    profilePicture?: string;
+  };
+  createdAt?: string;
+}
+
+export interface CreateGroupDto {
+  name: string;
+  description?: string;
+  orgId?: string;
+  accessMode?: "PUBLIC" | "ORGANIZATION";
+  requireApproval?: boolean;
+}
+
+export interface GroupQuestionContext {
+  quizId: string;
+  quizTitle?: string;
+  questionId: string;
+  questionSnippet: string;
+}
+
+export interface GroupMessage {
+  messageId: string;
+  groupId: string;
+  senderId?: string;
+  senderName?: string;
+  senderAvatar?: string;
+  senderRole?: string;
+  authorId?: string;
+  authorName?: string;
+  authorAvatar?: string;
+  authorRole?: string;
+  content: string;
+  isPinned: boolean;
+  pinnedAt?: string;
+  pinnedBy?: string;
+  questionContext?: GroupQuestionContext;
+  createdAt: string;
+}
+
+export interface SendGroupMessageDto {
+  content: string;
+  questionContext?: GroupQuestionContext;
+}
+
+export interface GradebookEntry {
+  userId: string;
+  username: string;
+  fullName: string;
+  email: string;
+  scores: Record<string, { score: number; percentage: number; completedAt: string } | null>;
+  totalCompleted: number;
+  averageScore: number;
+}
+
+export interface GroupGradebookResponse {
+  quizzes: { quizId: string; title: string; totalQuestions: number; dueDate?: string }[];
+  students: GradebookEntry[];
+}
+
+// ==================== NOTIFICATION TYPES ====================
+export interface NotificationItem {
+  notificationId: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: "QUIZ_ASSIGNED" | "DISCUSSION_REPLY" | "GROUP_INVITE" | "ORG_UPDATE";
+  link?: string;
+  read: boolean;
+  createdAt: string;
 }
 

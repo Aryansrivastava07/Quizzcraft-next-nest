@@ -174,7 +174,7 @@ function QuizResultsContent() {
           {/* Top 3 Podium Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end pt-5">
             {/* 2nd Place: Alex Rivera (CurrentUser) */}
-            <div className="order-2 md:order-1 rounded-2xl p-5 border border-primary/50 relative bg-gradient-to-b from-primary-container/20 to-surface-container-low/90 shadow-lg shadow-primary/10">
+            <div className="order-2 md:order-1 rounded-2xl p-5 border border-primary/40 relative bg-surface-container-low/90 backdrop-blur-md shadow-lg shadow-primary/10">
               <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-primary text-on-primary text-[11px] font-label-code font-bold uppercase tracking-wider flex items-center gap-1 shadow-md">
                 <span className="material-symbols-outlined text-xs">star</span>
                 <span>2nd • YOU</span>
@@ -212,7 +212,7 @@ function QuizResultsContent() {
             </div>
 
             {/* 1st Place: Elena Vance (Champion) */}
-            <div className="order-1 md:order-2 rounded-2xl p-6 border-2 border-tertiary/60 relative transform md:-translate-y-2 bg-gradient-to-b from-tertiary-container/30 via-surface-container/90 to-surface-container-lowest shadow-xl shadow-tertiary/20">
+            <div className="order-1 md:order-2 rounded-2xl p-6 border-2 border-tertiary/60 relative transform md:-translate-y-2 bg-surface-container-low/90 backdrop-blur-md shadow-xl shadow-tertiary/20">
               <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-3.5 py-1 rounded-full bg-tertiary text-on-tertiary text-[11px] font-label-code font-bold uppercase tracking-wider flex items-center gap-1 shadow-lg">
                 <span className="material-symbols-outlined text-sm">military_tech</span>
                 <span>1st • GRAND CHAMPION</span>
@@ -250,7 +250,7 @@ function QuizResultsContent() {
             </div>
 
             {/* 3rd Place: Marcus Chen */}
-            <div className="order-3 rounded-2xl p-5 border border-secondary/40 relative bg-gradient-to-b from-secondary-container/20 to-surface-container-low/90 shadow-lg">
+            <div className="order-3 rounded-2xl p-5 border border-outline-variant/40 relative bg-surface-container-low/90 backdrop-blur-md shadow-lg">
               <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-secondary-container text-on-secondary-container text-[11px] font-label-code font-bold uppercase tracking-wider flex items-center gap-1">
                 <span className="material-symbols-outlined text-xs">workspace_premium</span>
                 <span>3rd Place</span>
@@ -375,7 +375,7 @@ function QuizResultsContent() {
                     <span className="text-tertiary font-label-code font-bold">100% (3/3)</span>
                   </div>
                   <div className="w-full h-1.5 rounded-full bg-surface-container-highest overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-primary to-tertiary w-full rounded-full" />
+                    <div className="h-full bg-tertiary w-full rounded-full" />
                   </div>
                 </div>
 
@@ -385,7 +385,7 @@ function QuizResultsContent() {
                     <span className="text-tertiary font-label-code font-bold">100% (3/3)</span>
                   </div>
                   <div className="w-full h-1.5 rounded-full bg-surface-container-highest overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-primary to-tertiary w-full rounded-full" />
+                    <div className="h-full bg-tertiary w-full rounded-full" />
                   </div>
                 </div>
 
@@ -395,7 +395,7 @@ function QuizResultsContent() {
                     <span className="text-error font-label-code font-bold">66% (2/3)</span>
                   </div>
                   <div className="w-full h-1.5 rounded-full bg-surface-container-highest overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-error to-primary w-[66%] rounded-full" />
+                    <div className="h-full bg-error w-[66%] rounded-full" />
                   </div>
                 </div>
 
@@ -405,7 +405,7 @@ function QuizResultsContent() {
                     <span className="text-tertiary font-label-code font-bold">100% (3/3)</span>
                   </div>
                   <div className="w-full h-1.5 rounded-full bg-surface-container-highest overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-primary to-tertiary w-full rounded-full" />
+                    <div className="h-full bg-tertiary w-full rounded-full" />
                   </div>
                 </div>
               </div>

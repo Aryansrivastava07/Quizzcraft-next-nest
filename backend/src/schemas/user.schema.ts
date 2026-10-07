@@ -55,8 +55,8 @@ export class User {
   @Prop({ default: '' })
   bio!: string;
 
-  @Prop({ default: null })
-  mobileNo!: Number;
+  @Prop({ type: Number, required: false, default: undefined })
+  mobileNo?: number;
 
   @Prop({ default: '' })
   phoneNumber!: string;
@@ -84,6 +84,22 @@ export class User {
 
   @Prop({ default: '' })
   refreshToken!: string;
+
+  @Prop({ type: String, default: null, index: true })
+  orgId?: string | null;
+
+  @Prop({ type: String, default: null, index: true })
+  orgSlug?: string | null;
+
+  @Prop({
+    type: String,
+    enum: ['PUBLIC_USER', 'SUPER_ADMIN', 'ORG_ADMIN', 'ORG_PARTNER', 'ORG_STD'],
+    default: 'PUBLIC_USER',
+  })
+  role!: 'PUBLIC_USER' | 'SUPER_ADMIN' | 'ORG_ADMIN' | 'ORG_PARTNER' | 'ORG_STD';
+
+  @Prop({ type: [String], default: [] })
+  groupIds!: string[];
 
   @Prop({
     type: {

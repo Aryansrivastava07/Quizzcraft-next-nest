@@ -16,32 +16,32 @@ const steps: StepItem[] = [
   {
     num: "1",
     numColor: "text-primary/40 group-hover:text-primary",
-    icon: "cloud_upload",
+    icon: "picture_as_pdf",
     iconBg: "group-hover:bg-primary-container/20 text-primary",
-    title: "Upload Your Content",
+    title: "Drop Course PDFs & Notes",
     description:
-      "Drop any lecture notes, syllabus PDF, research paper, or enter a prompt topic. Our parser extracts the key concepts instantly.",
-    badgeLabel: "Instant Parsing",
+      "Upload multi-page textbook PDFs, lecture slides, research papers, or syllabus documents. Gemini parses mathematical formulas and core concepts instantly.",
+    badgeLabel: "Deep PDF Parsing",
   },
   {
     num: "2",
     numColor: "text-tertiary/40 group-hover:text-tertiary",
-    icon: "tune",
+    icon: "shield_lock",
     iconBg: "group-hover:bg-tertiary-container/20 text-tertiary",
-    title: "Customize & Preview",
+    title: "Configure Proctoring & Bloom Rules",
     description:
-      "Choose question count, difficulty, and formats like Multiple Choice or True/False. Review and edit questions in our intuitive editor.",
-    badgeLabel: "Full Control",
+      "Fine-tune cognitive difficulty and enable anti-cheat controls: fullscreen lock, tab-switching tracking, time limits, and dynamic question shuffling.",
+    badgeLabel: "Proctoring Guards",
   },
   {
     num: "3",
     numColor: "text-amber-accent/40 group-hover:text-amber-accent",
-    icon: "play_circle",
+    icon: "hub",
     iconBg: "group-hover:bg-amber-accent/20 text-amber-accent",
-    title: "Host Live & Compete",
+    title: "Deploy to Arena or Cohorts",
     description:
-      "Share a 6-digit game PIN or QR code. Players join from mobile or desktop with real-time scoring, streaks, and leaderboards.",
-    badgeLabel: "Live Multiplayer",
+      "Host live synchronized exams with PIN access, or assign homework directly to institutional student cohorts with automated gradebook scoring.",
+    badgeLabel: "Arena & Cohorts",
   },
 ];
 

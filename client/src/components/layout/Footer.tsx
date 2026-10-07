@@ -28,7 +28,7 @@ export default function Footer() {
             </span>
           </Link>
           <span className="font-body-sm text-on-surface-variant text-xs text-center sm:text-left">
-            © 2026 QuizzCraft.app. Interactive 3D Learning Platform.
+            &copy; 2026 QuizzCraft.app. Next-Gen Quiz Platform.
           </span>
         </div>
 

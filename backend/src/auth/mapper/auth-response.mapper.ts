@@ -11,6 +11,11 @@ export const toLoginDto = (user: User): LoginAuthResponseDto => ({
     fullName: user.fullName || '',
     institution: user.institution || '',
     phoneNumber: user.phoneNumber || (user.mobileNo ? String(user.mobileNo) : ''),
+    role: user.role || 'PUBLIC_USER',
+    orgId: user.orgId || null,
+    orgSlug: user.orgSlug || null,
+    isSuperAdmin: user.role === 'SUPER_ADMIN' || Boolean((user as any).isSuperAdmin),
+    groupIds: user.groupIds || [],
 });
 
 export const toRegisterDto = (user: User): RegisterAuthResponseDto => ({
@@ -20,6 +25,11 @@ export const toRegisterDto = (user: User): RegisterAuthResponseDto => ({
     fullName: user.fullName || '',
     institution: user.institution || '',
     phoneNumber: user.phoneNumber || (user.mobileNo ? String(user.mobileNo) : ''),
+    role: user.role || 'PUBLIC_USER',
+    orgId: user.orgId || null,
+    orgSlug: user.orgSlug || null,
+    isSuperAdmin: user.role === 'SUPER_ADMIN' || Boolean((user as any).isSuperAdmin),
+    groupIds: user.groupIds || [],
 });
 
 export const toMeDto = (user: User): MeAuthResponseDto => ({
@@ -32,4 +42,9 @@ export const toMeDto = (user: User): MeAuthResponseDto => ({
     fullName: user.fullName || '',
     institution: user.institution || '',
     phoneNumber: user.phoneNumber || (user.mobileNo ? String(user.mobileNo) : ''),
+    role: user.role || 'PUBLIC_USER',
+    orgId: user.orgId || null,
+    orgSlug: user.orgSlug || null,
+    isSuperAdmin: user.role === 'SUPER_ADMIN' || Boolean((user as any).isSuperAdmin),
+    groupIds: user.groupIds || [],
 });

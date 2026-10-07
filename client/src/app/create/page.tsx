@@ -181,14 +181,43 @@ function CreateQuizContent() {
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     setGenerateError(null);
-    setIsGenerating(true);
-    setProgressStatus("Dispatching quiz generation to backend Gemini engine...");
 
     const realPdfs = selectedSources.includes("pdf") ? pdfFiles : [];
     const realImages = selectedSources.includes("image") ? imageFiles.map((i) => i.file) : [];
     const realVideos = selectedSources.includes("video") ? videoFiles : [];
-
+    const realUrl = selectedSources.includes("url") ? urlInput.trim() : "";
     let promptText = topicPrompt.trim();
+
+    // Ensure user provided at least one legitimate source (no mock fallbacks)
+    const hasFiles = realPdfs.length > 0 || realImages.length > 0 || realVideos.length > 0;
+    const hasUrl = Boolean(realUrl);
+    const hasPrompt = Boolean(promptText);
+
+    if (!hasPrompt && !hasFiles && !hasUrl) {
+      setGenerateError("Please enter a topic prompt, attach a media file (PDF, Image, or Video), or provide a web URL.");
+      return;
+    }
+
+    if (selectedSources.includes("pdf") && pdfFiles.length === 0 && !hasPrompt && !hasUrl && realImages.length === 0 && realVideos.length === 0) {
+      setGenerateError("Please attach at least one PDF or document file to proceed.");
+      return;
+    }
+
+    if (selectedSources.includes("video") && videoFiles.length === 0 && !hasPrompt && !hasUrl && realPdfs.length === 0 && realImages.length === 0) {
+      setGenerateError("Please attach a video file to proceed.");
+      return;
+    }
+
+    if (selectedSources.includes("image") && imageFiles.length === 0 && !hasPrompt && !hasUrl && realPdfs.length === 0 && realVideos.length === 0) {
+      setGenerateError("Please attach at least one image or diagram file to proceed.");
+      return;
+    }
+
+    if (selectedSources.includes("url") && !realUrl && !hasPrompt && !hasFiles) {
+      setGenerateError("Please enter a valid web article or resource URL to proceed.");
+      return;
+    }
+
     if (!promptText) {
       const fileNames = [
         ...realPdfs.map((f) => f.name),
@@ -197,11 +226,20 @@ function CreateQuizContent() {
       ];
       if (fileNames.length > 0) {
         promptText = `Generate a high-yield, comprehensive educational quiz covering the key concepts and facts from: ${fileNames.join(", ")}`;
-      } else if (selectedSources.includes("url") && urlInput.trim()) {
-        promptText = `Generate a quiz based on content from: ${urlInput.trim()}`;
-      } else {
-        promptText = "Quantum Physics Foundations and Applied Science";
+      } else if (hasUrl) {
+        promptText = `Generate a comprehensive educational quiz based on the content of: ${realUrl}`;
       }
+    }
+
+    setIsGenerating(true);
+    if (realVideos.length > 0) {
+      setProgressStatus("Uploading video and analyzing scene timestamps with Gemini multimodal engine...");
+    } else if (realPdfs.length > 0) {
+      setProgressStatus("Ingesting document and mapping question exhibits...");
+    } else if (hasUrl) {
+      setProgressStatus("Fetching web article and analyzing verified visual anchors...");
+    } else {
+      setProgressStatus("Generating interactive questions and resolving verified topic exhibits...");
     }
 
     try {
@@ -974,7 +1012,7 @@ function CreateQuizContent() {
       {showMissionModal && createdQuizPayload && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
           <div className="relative w-full max-w-xl rounded-2xl glass-kage border border-primary/40 p-6 sm:p-8 shadow-2xl space-y-6 overflow-hidden bg-[#0c1020]">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-tertiary to-amber-accent" />
+            <div className="absolute top-0 left-0 right-0 h-[1px] bg-primary/40" />
             <div className="absolute -top-24 -right-24 w-60 h-60 rounded-full bg-primary/20 blur-[80px] pointer-events-none" />
 
             {/* Modal Header */}
@@ -1112,7 +1150,7 @@ function CreateQuizContent() {
                 <button
                   type="button"
                   onClick={handleProceedToDeploy}
-                  className="w-full py-3.5 px-5 rounded-xl bg-gradient-to-r from-primary-container via-secondary-container to-tertiary hover:opacity-95 text-white font-headline-sm font-bold text-sm shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full py-3.5 px-5 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white font-headline-sm font-bold text-sm shadow-xl shadow-primary-container/25 border border-white/10 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-lg">settings_suggest</span>
                   <span>Proceed to Deployment Hub ⚙️</span>

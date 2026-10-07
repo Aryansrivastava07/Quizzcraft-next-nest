@@ -100,4 +100,11 @@ export class deployQuizDto {
 
   @IsOptional()
   isPractice?: boolean;
+
+  @IsOptional()
+  @IsString()
+  groupId?: string;
+
+  @IsOptional()
+  dueDate?: string | Date;
 }

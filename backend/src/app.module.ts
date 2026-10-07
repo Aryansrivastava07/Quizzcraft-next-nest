@@ -11,6 +11,10 @@ import { AiModule } from './ai/ai.module';
 import { HealthModule } from './health/health.module';
 import { RedisModule } from './redis/redis.module';
 
+import { OrganizationModule } from './organization/organization.module';
+import { GroupModule } from './group/group.module';
+import { NotificationModule } from './notification/notification.module';
+
 @Module({
   imports: [
     AuthModule,
@@ -25,6 +29,9 @@ import { RedisModule } from './redis/redis.module';
     QuizModule,
     AiModule,
     HealthModule,
+    OrganizationModule,
+    GroupModule,
+    NotificationModule,
   ],
 })
 

@@ -101,4 +101,74 @@ export const API_ROUTES = {
     // POST: Unlink email
     unlinkEmail: `${API_BASE_URL}/api/profile/unlink-email`,
   },
+
+  // ==========================================
+  // ORGANIZATION ROUTES
+  // File: src/organization/organization.controller.ts
+  // ==========================================
+  org: {
+    register: `${API_BASE_URL}/api/org/register`,
+    current: `${API_BASE_URL}/api/org/current`,
+    members: `${API_BASE_URL}/api/org/members`,
+    updateRole: (userId: string) => `${API_BASE_URL}/api/org/members/${encodeURIComponent(userId)}/role`,
+    removeMember: (userId: string) => `${API_BASE_URL}/api/org/members/${encodeURIComponent(userId)}`,
+    bySlug: (slug: string) => `${API_BASE_URL}/api/org/by-slug/${encodeURIComponent(slug)}`,
+    join: (slug: string) => `${API_BASE_URL}/api/org/join/${encodeURIComponent(slug)}`,
+    membersBySlug: (slug: string) => `${API_BASE_URL}/api/org/by-slug/${encodeURIComponent(slug)}/members`,
+    quizzesBySlug: (slug: string) => `${API_BASE_URL}/api/org/by-slug/${encodeURIComponent(slug)}/quizzes`,
+    groupsBySlug: (slug: string) => `${API_BASE_URL}/api/org/by-slug/${encodeURIComponent(slug)}/groups`,
+  },
+
+  // ==========================================
+  // SUPER ADMIN ROUTES
+  // File: src/organization/organization.controller.ts
+  // ==========================================
+  superAdmin: {
+    stats: `${API_BASE_URL}/api/super-admin/stats`,
+    orgs: `${API_BASE_URL}/api/super-admin/orgs`,
+    orgDetails: (orgId: string) => `${API_BASE_URL}/api/super-admin/orgs/${encodeURIComponent(orgId)}`,
+    quizzes: `${API_BASE_URL}/api/super-admin/quizzes`,
+  },
+
+  // ==========================================
+  // GROUP ROUTES
+  // File: src/group/group.controller.ts
+  // ==========================================
+  group: {
+    base: `${API_BASE_URL}/api/groups`,
+    create: `${API_BASE_URL}/api/groups`,
+    list: `${API_BASE_URL}/api/groups`,
+    explorePublic: `${API_BASE_URL}/api/groups/explore/public`,
+    get: (groupId: string) => `${API_BASE_URL}/api/groups/${encodeURIComponent(groupId)}`,
+    join: `${API_BASE_URL}/api/groups/join`,
+    joinById: (groupId: string) => `${API_BASE_URL}/api/groups/${encodeURIComponent(groupId)}/join`,
+    approve: (groupId: string, userId: string) =>
+      `${API_BASE_URL}/api/groups/${encodeURIComponent(groupId)}/approve/${encodeURIComponent(userId)}`,
+    regenerateCode: (groupId: string) =>
+      `${API_BASE_URL}/api/groups/${encodeURIComponent(groupId)}/regenerate-code`,
+    updateSettings: (groupId: string) =>
+      `${API_BASE_URL}/api/groups/${encodeURIComponent(groupId)}/settings`,
+    quizzes: (groupId: string) =>
+      `${API_BASE_URL}/api/groups/${encodeURIComponent(groupId)}/quizzes`,
+    gradebook: (groupId: string) =>
+      `${API_BASE_URL}/api/groups/${encodeURIComponent(groupId)}/gradebook`,
+    messages: (groupId: string) =>
+      `${API_BASE_URL}/api/groups/${encodeURIComponent(groupId)}/messages`,
+    sendMessage: (groupId: string) =>
+      `${API_BASE_URL}/api/groups/${encodeURIComponent(groupId)}/messages`,
+    pinMessage: (groupId: string, messageId: string) =>
+      `${API_BASE_URL}/api/groups/${encodeURIComponent(groupId)}/messages/${encodeURIComponent(messageId)}/pin`,
+    deleteMessage: (groupId: string, messageId: string) =>
+      `${API_BASE_URL}/api/groups/${encodeURIComponent(groupId)}/messages/${encodeURIComponent(messageId)}`,
+  },
+
+  // ==========================================
+  // NOTIFICATIONS ROUTES
+  // File: src/notification/notification.controller.ts
+  // ==========================================
+  notifications: {
+    list: `${API_BASE_URL}/api/notifications`,
+    read: (id: string) => `${API_BASE_URL}/api/notifications/${encodeURIComponent(id)}/read`,
+    readAll: `${API_BASE_URL}/api/notifications/read-all`,
+  },
 } as const;

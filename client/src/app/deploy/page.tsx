@@ -58,6 +58,7 @@ function DeployScheduleContent() {
   // Access Mode: PUBLIC | PRIVATE | ORGANIZATION
   const [accessMode, setAccessMode] = useState<"PUBLIC" | "PRIVATE" | "ORGANIZATION">("PUBLIC");
   const [organizationDomain, setOrganizationDomain] = useState<string>("");
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   // User Emails & Org Detection
   const [userEmails, setUserEmails] = useState<string[]>([]);
@@ -87,6 +88,114 @@ function DeployScheduleContent() {
   // General deploy error
   const [deployError, setDeployError] = useState<string | null>(null);
 
+  // Cover Image Customization
+  const [showCoverModal, setShowCoverModal] = useState(false);
+  const [coverInputUrl, setCoverInputUrl] = useState("");
+  const [isSavingCover, setIsSavingCover] = useState(false);
+  const [coverError, setCoverError] = useState<string | null>(null);
+
+  const handleSaveCover = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!coverInputUrl.trim() || !quizId) return;
+    setIsSavingCover(true);
+    setCoverError(null);
+    try {
+      await quizService.updateQuiz(quizId, { coverImage: coverInputUrl.trim() });
+      setCoverImage(coverInputUrl.trim());
+      setShowCoverModal(false);
+      try {
+        const cached = localStorage.getItem("qc_active_quiz");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          parsed.coverImage = coverInputUrl.trim();
+          localStorage.setItem("qc_active_quiz", JSON.stringify(parsed));
+        }
+      } catch (e) {}
+    } catch (err: any) {
+      setCoverError(err?.message || "Failed to update cover image");
+    } finally {
+      setIsSavingCover(false);
+    }
+  };
+
+  // Instant Access Mode & Security persistence
+  const [isUpdatingAccessMode, setIsUpdatingAccessMode] = useState(false);
+  const [accessModeFeedback, setAccessModeFeedback] = useState<string | null>(null);
+
+  const handleUpdateAccessMode = async (newMode: "PUBLIC" | "PRIVATE" | "ORGANIZATION") => {
+    setAccessMode(newMode);
+    if (!quizId) return;
+
+    if (newMode === "ORGANIZATION" && userOrgEmails.length === 0) {
+      setShowLinkOrgEmailModal(true);
+      return;
+    }
+
+    setIsUpdatingAccessMode(true);
+    setDeployError(null);
+    try {
+      const activeOrgDomain = newMode === "ORGANIZATION"
+        ? (organizationDomain || (userOrgEmails[0] ? userOrgEmails[0].split("@")[1]?.toLowerCase() : undefined))
+        : undefined;
+
+      await quizService.updateQuiz(quizId, {
+        accessMode: newMode,
+        organizationDomain: activeOrgDomain,
+      });
+
+      setAccessModeFeedback(`Access mode updated to ${newMode}`);
+      setTimeout(() => setAccessModeFeedback(null), 3500);
+
+      try {
+        const cached = localStorage.getItem("qc_active_quiz");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          parsed.accessMode = newMode;
+          if (newMode === "ORGANIZATION" && activeOrgDomain) {
+            parsed.organizationDomain = activeOrgDomain;
+          }
+          localStorage.setItem("qc_active_quiz", JSON.stringify(parsed));
+        }
+      } catch (e) {}
+    } catch (err: any) {
+      setDeployError(err?.message || "Failed to update access mode");
+    } finally {
+      setIsUpdatingAccessMode(false);
+    }
+  };
+
+  const handleUpdateDomain = async (newDomain: string) => {
+    setOrganizationDomain(newDomain);
+    if (!quizId || accessMode !== "ORGANIZATION") return;
+    try {
+      await quizService.updateQuiz(quizId, {
+        accessMode: "ORGANIZATION",
+        organizationDomain: newDomain,
+      });
+      setAccessModeFeedback(`Organization domain updated to @${newDomain}`);
+      setTimeout(() => setAccessModeFeedback(null), 3500);
+    } catch (err: any) {
+      setDeployError(err?.message || "Failed to update organization domain");
+    }
+  };
+
+  const handleToggleSecurity = async (
+    key: "antiCheat" | "fullScreenLock" | "shuffleChoices" | "allowRetries",
+    value: boolean
+  ) => {
+    if (key === "antiCheat") setAntiCheat(value);
+    if (key === "fullScreenLock") setFullScreenLock(value);
+    if (key === "shuffleChoices") setShuffleChoices(value);
+    if (key === "allowRetries") setAllowRetries(value);
+
+    if (!quizId) return;
+    try {
+      await quizService.updateQuiz(quizId, { [key]: value });
+      setAccessModeFeedback("Assessment settings updated");
+      setTimeout(() => setAccessModeFeedback(null), 2500);
+    } catch (e) {}
+  };
+
   // Set default schedule time to tomorrow at 10:00 AM
   useEffect(() => {
     const tomorrow = new Date();
@@ -109,7 +218,7 @@ function DeployScheduleContent() {
           const cached = localStorage.getItem("qc_active_quiz");
           if (cached) {
             cachedQuiz = JSON.parse(cached);
-            targetId = cachedQuiz?.quizId;
+            targetId = cachedQuiz?.quizId || cachedQuiz?.id;
           }
         } catch (e) {
           console.warn("Could not read cached quiz:", e);
@@ -119,9 +228,9 @@ function DeployScheduleContent() {
       if (targetId) {
         try {
           const res = await quizService.getQuiz(targetId);
-          const q = res.data?.quiz || cachedQuiz;
+          const q = res.data?.quiz || res.data || cachedQuiz;
           if (q) {
-            setQuizId(q.quizId);
+            setQuizId(q.quizId || targetId);
             setQuizTitle(q.title || "Quantum Computing Principles");
             if (q.coverImage) {
               setCoverImage(q.coverImage);
@@ -136,7 +245,7 @@ function DeployScheduleContent() {
             if (q.organizationDomain) {
               setOrganizationDomain(q.organizationDomain);
             }
-            if (q.deploymentType === "ANYTIME") {
+            if (q.deploymentType === "ANYTIME" || q.status === "ANYTIME") {
               setAnytimeActive(true);
             }
             if (q.scheduledFor) {
@@ -145,6 +254,10 @@ function DeployScheduleContent() {
                 liveUntil: q.liveUntil ? new Date(q.liveUntil).toLocaleString() : "",
               });
             }
+            if (q.antiCheat !== undefined) setAntiCheat(Boolean(q.antiCheat));
+            if (q.fullScreenLock !== undefined) setFullScreenLock(Boolean(q.fullScreenLock));
+            if (q.shuffleChoices !== undefined) setShuffleChoices(Boolean(q.shuffleChoices));
+            if (q.allowRetries !== undefined) setAllowRetries(Boolean(q.allowRetries));
             if (Array.isArray(q.questions) && q.questions.length > 0) {
               setQuestionCount(q.questions.length);
               const xpSum = q.questions.reduce((sum: number, item: any) => sum + (item.xp || 200), 0);
@@ -154,8 +267,14 @@ function DeployScheduleContent() {
         } catch (err) {
           console.warn("Could not fetch quiz for deploy:", err);
           if (cachedQuiz) {
-            setQuizId(cachedQuiz.quizId || "QC-9804-QBIT");
+            setQuizId(cachedQuiz.quizId || cachedQuiz.id || "QC-9804-QBIT");
             setQuizTitle(cachedQuiz.title || "Quantum Computing Principles");
+            if (cachedQuiz.coverImage) setCoverImage(cachedQuiz.coverImage);
+            if (cachedQuiz.accessMode) setAccessMode(cachedQuiz.accessMode);
+            if (cachedQuiz.antiCheat !== undefined) setAntiCheat(Boolean(cachedQuiz.antiCheat));
+            if (cachedQuiz.fullScreenLock !== undefined) setFullScreenLock(Boolean(cachedQuiz.fullScreenLock));
+            if (cachedQuiz.shuffleChoices !== undefined) setShuffleChoices(Boolean(cachedQuiz.shuffleChoices));
+            if (cachedQuiz.allowRetries !== undefined) setAllowRetries(Boolean(cachedQuiz.allowRetries));
             if (cachedQuiz.pin) {
               const rawPin = String(cachedQuiz.pin).replace(/\D/g, "");
               setPin(rawPin.length === 6 ? `${rawPin.slice(0, 3)}-${rawPin.slice(3)}` : rawPin);
@@ -169,6 +288,7 @@ function DeployScheduleContent() {
         const meRes = await authService.getMe();
         const user = meRes?.data?.user;
         if (user) {
+          setUserRole(user.role || null);
           const emails = Array.isArray(user.emails) && user.emails.length > 0
             ? user.emails
             : [user.email];
@@ -242,15 +362,17 @@ function DeployScheduleContent() {
 
     setIsStartingLive(true);
     try {
+      const isStudentUser = userRole === "ORG_STD" || userRole === "ORG_USER";
       const res = await quizService.deployQuiz(quizId, {
         deploymentType: "LIVE",
-        accessMode,
-        organizationDomain: accessMode === "ORGANIZATION" ? organizationDomain : undefined,
+        accessMode: isStudentUser ? "PRIVATE" : accessMode,
+        organizationDomain: (!isStudentUser && accessMode === "ORGANIZATION") ? organizationDomain : undefined,
         liveDurationMinutes,
         antiCheat,
         fullScreenLock,
         shuffleChoices,
         allowRetries,
+        isPractice: isStudentUser ? true : undefined,
       });
 
       // Redirect directly to the Quiz Admin Panel!
@@ -265,7 +387,8 @@ function DeployScheduleContent() {
   const handleConfirmSchedule = async () => {
     setDeployError(null);
 
-    if (accessMode === "ORGANIZATION" && userOrgEmails.length === 0) {
+    const isStudentUser = userRole === "ORG_STD" || userRole === "ORG_USER";
+    if (!isStudentUser && accessMode === "ORGANIZATION" && userOrgEmails.length === 0) {
       setShowLinkOrgEmailModal(true);
       return;
     }
@@ -287,12 +410,13 @@ function DeployScheduleContent() {
         deploymentType: "SCHEDULED",
         scheduledFor: scheduledDate.toISOString(),
         liveDurationMinutes: scheduledDurationMinutes,
-        accessMode,
-        organizationDomain: accessMode === "ORGANIZATION" ? organizationDomain : undefined,
+        accessMode: isStudentUser ? "PRIVATE" : accessMode,
+        organizationDomain: (!isStudentUser && accessMode === "ORGANIZATION") ? organizationDomain : undefined,
         antiCheat,
         fullScreenLock,
         shuffleChoices,
         allowRetries,
+        isPractice: isStudentUser ? true : undefined,
       });
 
       const liveUntilDate = new Date(scheduledDate.getTime() + scheduledDurationMinutes * 60000);
@@ -311,7 +435,8 @@ function DeployScheduleContent() {
   const handleEnableAnytime = async () => {
     setDeployError(null);
 
-    if (accessMode === "ORGANIZATION" && userOrgEmails.length === 0) {
+    const isStudentUser = userRole === "ORG_STD" || userRole === "ORG_USER";
+    if (!isStudentUser && accessMode === "ORGANIZATION" && userOrgEmails.length === 0) {
       setShowLinkOrgEmailModal(true);
       return;
     }
@@ -320,12 +445,13 @@ function DeployScheduleContent() {
     try {
       await quizService.deployQuiz(quizId, {
         deploymentType: "ANYTIME",
-        accessMode,
-        organizationDomain: accessMode === "ORGANIZATION" ? organizationDomain : undefined,
+        accessMode: isStudentUser ? "PRIVATE" : accessMode,
+        organizationDomain: (!isStudentUser && accessMode === "ORGANIZATION") ? organizationDomain : undefined,
         antiCheat,
         fullScreenLock,
         shuffleChoices,
         allowRetries,
+        isPractice: isStudentUser ? true : undefined,
       });
       setAnytimeActive(true);
     } catch (err: any) {
@@ -341,6 +467,24 @@ function DeployScheduleContent() {
       <Navbar />
 
       <main className="relative z-10 w-full max-w-max-width-canvas mx-auto px-4 sm:px-8 pt-28 pb-16 flex-1 flex flex-col gap-6">
+        {/* Student Practice Sandbox Notice */}
+        {(userRole === "ORG_STD" || userRole === "ORG_USER") && (
+          <div className="p-4 rounded-2xl bg-primary/10 border border-primary/30 flex items-start gap-3 shadow-lg">
+            <span className="material-symbols-outlined text-primary text-xl mt-0.5 shrink-0">
+              school
+            </span>
+            <div className="text-xs">
+              <p className="font-bold text-white">
+                Learner Self-Practice Sandbox
+              </p>
+              <p className="text-on-surface-variant mt-0.5">
+                As an enrolled organization learner, quizzes you deploy are strictly sandboxed for private self-practice.
+                They will remain private and will not be displayed in public library feeds or to other cohort members.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Error Banner */}
         {deployError && (
           <div className="p-4 rounded-xl bg-error/20 border border-error/50 text-error flex items-center justify-between gap-3 text-xs font-label-code">
@@ -400,18 +544,34 @@ function DeployScheduleContent() {
               </div>
 
               {/* 3D Holographic Sphere Thumbnail */}
-              <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex-shrink-0 rounded-2xl overflow-hidden p-1.5 bg-gradient-to-b from-primary/30 via-outline-variant/20 to-tertiary/20 shadow-2xl">
+              <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex-shrink-0 rounded-2xl overflow-hidden p-1.5 bg-surface-container-high border border-white/10 shadow-2xl group">
                 <div className="relative w-full h-full rounded-xl overflow-hidden bg-surface-container-lowest">
                   <img
                     src={coverImage || "/stitch/screen-6-cosmic-portal-3d.png"}
                     alt={quizTitle}
-                    className="w-full h-full object-cover transform hover:scale-110 transition-transform duration-700"
+                    className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-700"
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = "/stitch/screen-6-cosmic-portal-3d.png";
                     }}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-surface-container-lowest/80 via-transparent to-transparent" />
-                  <div className="absolute bottom-2 left-2 right-2 flex justify-between items-center text-[10px] font-label-code text-primary-fixed-dim bg-surface-container-low/80 backdrop-blur-sm px-2 py-1 rounded">
+                  <div className="absolute inset-0 bg-gradient-to-t from-surface-container-lowest/80 via-transparent to-transparent pointer-events-none" />
+                  
+                  {/* Edit Cover Overlay Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCoverInputUrl(coverImage || "");
+                      setCoverError(null);
+                      setShowCoverModal(true);
+                    }}
+                    className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 text-white cursor-pointer z-10 backdrop-blur-[2px]"
+                    title="Change Quiz Cover Image"
+                  >
+                    <span className="material-symbols-outlined text-2xl text-tertiary">photo_camera</span>
+                    <span className="text-[10px] font-headline-sm font-semibold tracking-wider uppercase">Change Cover</span>
+                  </button>
+
+                  <div className="absolute bottom-2 left-2 right-2 flex justify-between items-center text-[10px] font-label-code text-primary-fixed-dim bg-surface-container-low/80 backdrop-blur-sm px-2 py-1 rounded pointer-events-none z-0">
                     <span>MISSION ENGINE</span>
                     <span className="text-tertiary font-bold">READY</span>
                   </div>
@@ -431,9 +591,21 @@ function DeployScheduleContent() {
                   <h3 className="font-headline-sm text-sm font-bold text-white uppercase tracking-wider">
                     Global Quiz Access Mode
                   </h3>
+                  {isUpdatingAccessMode && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-mono text-tertiary animate-pulse ml-2">
+                      <span className="material-symbols-outlined text-xs animate-spin">progress_activity</span>
+                      Syncing...
+                    </span>
+                  )}
+                  {accessModeFeedback && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 animate-fadeIn ml-2">
+                      <span className="material-symbols-outlined text-xs">check_circle</span>
+                      {accessModeFeedback}
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-on-surface-variant mt-0.5">
-                  This rule governs all deployment protocols. Restrict access to open public, private invitation, or verified organization domain.
+                  Live synced: Changes take effect immediately across all active, anytime, and scheduled rooms.
                 </p>
               </div>
 
@@ -441,7 +613,8 @@ function DeployScheduleContent() {
                 {/* Public Mode */}
                 <button
                   type="button"
-                  onClick={() => setAccessMode("PUBLIC")}
+                  onClick={() => handleUpdateAccessMode("PUBLIC")}
+                  disabled={isUpdatingAccessMode}
                   className={`px-3 py-1.5 rounded-lg text-xs font-headline-sm font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                     accessMode === "PUBLIC"
                       ? "bg-primary text-surface-container-lowest shadow"
@@ -455,7 +628,8 @@ function DeployScheduleContent() {
                 {/* Private Mode */}
                 <button
                   type="button"
-                  onClick={() => setAccessMode("PRIVATE")}
+                  onClick={() => handleUpdateAccessMode("PRIVATE")}
+                  disabled={isUpdatingAccessMode}
                   className={`px-3 py-1.5 rounded-lg text-xs font-headline-sm font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                     accessMode === "PRIVATE"
                       ? "bg-secondary text-surface-container-lowest shadow"
@@ -469,12 +643,8 @@ function DeployScheduleContent() {
                 {/* Organization Mode */}
                 <button
                   type="button"
-                  onClick={() => {
-                    setAccessMode("ORGANIZATION");
-                    if (userOrgEmails.length === 0) {
-                      setShowLinkOrgEmailModal(true);
-                    }
-                  }}
+                  onClick={() => handleUpdateAccessMode("ORGANIZATION")}
+                  disabled={isUpdatingAccessMode}
                   className={`px-3 py-1.5 rounded-lg text-xs font-headline-sm font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                     accessMode === "ORGANIZATION"
                       ? "bg-tertiary text-surface-container-lowest shadow"
@@ -514,7 +684,7 @@ function DeployScheduleContent() {
                       <span className="text-xs text-on-surface-variant">Domain:</span>
                       <select
                         value={organizationDomain}
-                        onChange={(e) => setOrganizationDomain(e.target.value)}
+                        onChange={(e) => handleUpdateDomain(e.target.value)}
                         className="bg-surface-container-high border border-outline-variant text-white rounded-lg px-2.5 py-1 text-xs outline-none focus:border-tertiary font-mono"
                       >
                         {userOrgEmails.map((em) => {
@@ -611,8 +781,8 @@ function DeployScheduleContent() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
               {/* CARD 1: Launch Real-Time Live Quiz -> Admin Command Center */}
-              <div className="rounded-2xl p-5 sm:p-6 flex flex-col justify-between relative overflow-hidden border-2 border-primary/50 bg-gradient-to-b from-surface-container-low/95 to-surface-container-lowest shadow-xl">
-                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-primary-container to-secondary" />
+              <div className="rounded-2xl p-5 sm:p-6 flex flex-col justify-between relative overflow-hidden border-2 border-primary/50 bg-surface-container-low/90 backdrop-blur-xl shadow-xl">
+                <div className="absolute top-0 left-0 right-0 h-[2px] bg-primary" />
                 <div className="absolute -right-16 -top-16 w-36 h-36 rounded-full bg-primary/20 blur-3xl pointer-events-none" />
 
                 <div>
@@ -669,8 +839,8 @@ function DeployScheduleContent() {
               </div>
 
               {/* CARD 2: Schedule for Later -> Automated Mail 5m Before & Waitlist */}
-              <div className="rounded-2xl p-5 sm:p-6 flex flex-col justify-between relative overflow-hidden border border-outline-variant/40 bg-gradient-to-b from-surface-container-low/70 to-surface-container-lowest hover:border-secondary/60 transition-all shadow-xl">
-                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-secondary-container via-secondary to-primary-fixed-dim opacity-70" />
+              <div className="rounded-2xl p-5 sm:p-6 flex flex-col justify-between relative overflow-hidden border border-outline-variant/40 bg-surface-container-low/80 backdrop-blur-xl hover:border-secondary/60 transition-all shadow-xl">
+                <div className="absolute top-0 left-0 right-0 h-[2px] bg-secondary/70" />
 
                 <div>
                   <div className="flex justify-between items-center mb-4">
@@ -743,15 +913,15 @@ function DeployScheduleContent() {
               </div>
 
               {/* CARD 3: Anytime Mode / Self-Paced Access -> Invite Link & PIN */}
-              <div className="rounded-2xl p-5 sm:p-6 flex flex-col justify-between relative overflow-hidden border border-tertiary/40 bg-gradient-to-b from-surface-container-low/80 to-surface-container-lowest shadow-xl">
-                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-tertiary-container via-tertiary to-primary" />
+              <div className="rounded-2xl p-5 sm:p-6 flex flex-col justify-between relative overflow-hidden border border-tertiary/40 bg-surface-container-low/80 backdrop-blur-xl shadow-xl">
+                <div className="absolute top-0 left-0 right-0 h-[2px] bg-tertiary" />
                 <div className="absolute -right-16 -top-16 w-36 h-36 rounded-full bg-tertiary/15 blur-3xl pointer-events-none" />
 
                 <div>
                   <div className="flex justify-between items-center mb-4">
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tertiary-container/30 text-tertiary-fixed border border-tertiary/40 font-label-code text-xs uppercase tracking-wider">
                       <span className="w-2 h-2 rounded-full bg-tertiary" />
-                      Async • Open Access
+                      {accessMode === "PUBLIC" ? "Async • Public Access" : accessMode === "PRIVATE" ? "Async • Private Access" : "Async • Org Restricted"}
                     </span>
                     <span className="material-symbols-outlined text-tertiary text-2xl">all_inclusive</span>
                   </div>
@@ -822,8 +992,8 @@ function DeployScheduleContent() {
                 <input
                   type="checkbox"
                   checked={antiCheat}
-                  onChange={(e) => setAntiCheat(e.target.checked)}
-                  className="rounded border-outline-variant bg-surface-container text-primary"
+                  onChange={(e) => handleToggleSecurity("antiCheat", e.target.checked)}
+                  className="rounded border-outline-variant bg-surface-container text-primary cursor-pointer"
                 />
               </div>
 
@@ -835,8 +1005,8 @@ function DeployScheduleContent() {
                 <input
                   type="checkbox"
                   checked={fullScreenLock}
-                  onChange={(e) => setFullScreenLock(e.target.checked)}
-                  className="rounded border-outline-variant bg-surface-container text-primary"
+                  onChange={(e) => handleToggleSecurity("fullScreenLock", e.target.checked)}
+                  className="rounded border-outline-variant bg-surface-container text-primary cursor-pointer"
                 />
               </div>
 
@@ -848,8 +1018,8 @@ function DeployScheduleContent() {
                 <input
                   type="checkbox"
                   checked={shuffleChoices}
-                  onChange={(e) => setShuffleChoices(e.target.checked)}
-                  className="rounded border-outline-variant bg-surface-container text-primary"
+                  onChange={(e) => handleToggleSecurity("shuffleChoices", e.target.checked)}
+                  className="rounded border-outline-variant bg-surface-container text-primary cursor-pointer"
                 />
               </div>
 
@@ -861,8 +1031,8 @@ function DeployScheduleContent() {
                 <input
                   type="checkbox"
                   checked={allowRetries}
-                  onChange={(e) => setAllowRetries(e.target.checked)}
-                  className="rounded border-outline-variant bg-surface-container text-primary"
+                  onChange={(e) => handleToggleSecurity("allowRetries", e.target.checked)}
+                  className="rounded border-outline-variant bg-surface-container text-primary cursor-pointer"
                 />
               </div>
             </div>
@@ -970,6 +1140,86 @@ function DeployScheduleContent() {
             >
               Done
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Change Cover Modal */}
+      {showCoverModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+          <div className="bg-[#0b0f19] border border-white/15 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl relative">
+            <div className="flex justify-between items-center pb-2 border-b border-white/10">
+              <span className="font-headline-sm text-sm text-white font-bold flex items-center gap-2">
+                <span className="material-symbols-outlined text-base text-tertiary">photo_library</span>
+                <span>Customize Assessment Cover Image</span>
+              </span>
+              <button
+                onClick={() => setShowCoverModal(false)}
+                className="text-on-surface-variant hover:text-white transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-lg">close</span>
+              </button>
+            </div>
+
+            <p className="text-xs text-on-surface-variant leading-relaxed">
+              Enter any high-resolution image URL (Wikimedia, Unsplash, or custom CDN) to use as the visual cover for this assessment.
+            </p>
+
+            {coverError && (
+              <div className="p-3 rounded-xl bg-error/20 border border-error/50 text-error text-xs flex items-center gap-2">
+                <span className="material-symbols-outlined text-sm">error</span>
+                <span>{coverError}</span>
+              </div>
+            )}
+
+            {/* Live Preview */}
+            <div className="w-full h-44 rounded-2xl overflow-hidden bg-black/40 border border-white/10 relative">
+              <img
+                src={coverInputUrl.trim() || coverImage || "/stitch/screen-6-cosmic-portal-3d.png"}
+                alt="Cover Preview"
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = "/stitch/screen-6-cosmic-portal-3d.png";
+                }}
+              />
+              <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[10px] font-mono text-tertiary">
+                LIVE PREVIEW
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveCover} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-label-code text-on-surface-variant mb-1">
+                  Image Direct URL:
+                </label>
+                <input
+                  type="url"
+                  required
+                  value={coverInputUrl}
+                  onChange={(e) => setCoverInputUrl(e.target.value)}
+                  placeholder="https://images.unsplash.com/... or https://upload.wikimedia.org/..."
+                  className="w-full bg-white/[0.04] text-white border border-white/15 rounded-xl px-3.5 py-2.5 text-xs outline-none focus:border-tertiary transition-colors"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCoverModal(false)}
+                  className="px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-xs text-on-surface-variant hover:text-white transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingCover || !coverInputUrl.trim()}
+                  className="px-5 py-2 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white text-xs font-semibold shadow-md shadow-primary-container/25 border border-white/10 disabled:opacity-40 transition-all cursor-pointer active:scale-95 flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-sm">save</span>
+                  <span>{isSavingCover ? "Saving..." : "Save Cover Image"}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

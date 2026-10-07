@@ -20,8 +20,8 @@ export default function AfterlightSection() {
         ambientFloat={true}
         floatDelay={0.2}
       >
-        {/* Sleek Single-Color Surface - No Harsh Visible Gradient or Colored Orbs */}
-        <div className="relative rounded-3xl overflow-hidden p-8 sm:p-12 md:p-14 bg-[#0a0d18] border border-outline-variant/40 shadow-2xl">
+        {/* Sleek Space-Blended Glass Card */}
+        <div className="relative rounded-3xl overflow-hidden p-8 sm:p-12 md:p-14 bg-surface-container-low/80 backdrop-blur-2xl border border-white/10 shadow-2xl">
           <div className="relative z-10 max-w-2xl mx-auto text-center space-y-5">
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-headline-xl font-extrabold text-white leading-tight">
               Ready to Transform Your Content?

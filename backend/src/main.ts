@@ -5,11 +5,21 @@ import { validationPipe } from './common/pipes/validation.pipe';
 import cookieParser from 'cookie-parser';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import path from 'path';
+import { existsSync, mkdirSync } from 'fs';
 
 async function bootstrap() {
   const env = process.env.NODE_ENV || 'development';
   console.log(`[Server] Bootstrapping QuizzCraft Backend in ${env} mode...`);
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  const uploadsDir = path.join(process.cwd(), 'uploads');
+  if (!existsSync(uploadsDir)) {
+    mkdirSync(uploadsDir, { recursive: true });
+  }
+  app.useStaticAssets(uploadsDir, {
+    prefix: '/uploads/',
+  });
 
   // Trust reverse proxies (Render, Vercel, Railway, Cloudflare, etc.) so that secure cookies and forwarded headers work properly
   app.set('trust proxy', 1);

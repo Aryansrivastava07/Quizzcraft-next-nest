@@ -12,6 +12,7 @@ export const metadata: Metadata = {
 };
 
 import { AuthProvider } from "@/lib/auth/auth-context";
+import CosmicPreloader from "@/components/ui/CosmicPreloader";
 
 export default function RootLayout({
   children,
@@ -30,6 +31,7 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-background text-on-background min-h-screen relative overflow-x-hidden selection:bg-primary selection:text-on-primary font-body-md text-base antialiased">
+        <CosmicPreloader />
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

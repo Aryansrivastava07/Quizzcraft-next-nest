@@ -45,8 +45,40 @@ export const quizCreationSchema = {
                 type: 'integer',
                 description: 'XP awarded: 100 (EASY), 200 (MEDIUM), or 300 (HARD).',
               },
+              reference: {
+                type: 'object',
+                description: 'Visual reference anchor linking this question to the source material or conceptual diagram without spoiling the answer.',
+                properties: {
+                  type: {
+                    type: 'string',
+                    enum: ['IMAGE', 'VIDEO_FRAME', 'PDF_PAGE', 'WEB_SOURCE', 'VERIFIED_CDN'],
+                    description: 'Reference type: IMAGE (from uploaded images), VIDEO_FRAME (from uploaded video), PDF_PAGE (from uploaded PDF), WEB_SOURCE (from URL), or VERIFIED_CDN (concept keyword for text).',
+                  },
+                  sourceIndex: {
+                    type: 'integer',
+                    description: '0-based index of the uploaded file referenced (e.g. 0 for first image).',
+                  },
+                  timestamp: {
+                    type: 'string',
+                    description: 'Video timestamp in MM:SS format if referencing a video (e.g. "01:45").',
+                  },
+                  pageNumber: {
+                    type: 'integer',
+                    description: '1-based page number if referencing a PDF document.',
+                  },
+                  caption: {
+                    type: 'string',
+                    description: 'Contextual educational caption for the exhibit (e.g., "Figure 2: Experimental setup diagram" or "Video Lecture Snapshot at 02:14: Newton\'s Third Law demonstration"). MUST NEVER state or hint at the answer!',
+                  },
+                  searchKeyword: {
+                    type: 'string',
+                    description: '2 to 4 academic/scientific keywords to retrieve a verified diagram from Wikipedia/Wikimedia if no local diagram was provided (e.g. "mitochondria structure", "Bloch sphere", "Doppler effect").',
+                  },
+                },
+                required: ['type', 'caption'],
+              },
             },
-            required: ['question', 'options', 'answer', 'explanation'],
+            required: ['question', 'options', 'answer', 'explanation', 'reference'],
           },
         },
       },
@@ -56,7 +88,15 @@ export const quizCreationSchema = {
   required: ['quiz'],
 };
 
-export const generateQuizPrompt = (input: generateQuizDto | string) => {
+export const generateQuizPrompt = (
+  input: generateQuizDto | string,
+  extraContext?: {
+    uploadedImages?: { index: number; name: string }[];
+    uploadedVideos?: { index: number; name: string }[];
+    uploadedPdfs?: { index: number; name: string }[];
+    scrapedUrlText?: string;
+  },
+) => {
   const dto: Partial<generateQuizDto> =
     typeof input === 'string' ? { prompt: input } : input || {};
 
@@ -66,6 +106,33 @@ export const generateQuizPrompt = (input: generateQuizDto | string) => {
   const difficulty = dto.difficulty?.trim() || 'Intermediate';
   const quizType = dto.quizType?.trim() || 'Multiple Choice';
   const sourceUrl = dto.sourceUrl?.trim() ? `\n- Reference/Source URL: ${dto.sourceUrl.trim()}` : '';
+
+  // Attached files description
+  const attachedMediaLines: string[] = [];
+  if (extraContext?.uploadedImages && extraContext.uploadedImages.length > 0) {
+    extraContext.uploadedImages.forEach((img) => {
+      attachedMediaLines.push(`  - Uploaded Image [index ${img.index}]: "${img.name}"`);
+    });
+  }
+  if (extraContext?.uploadedVideos && extraContext.uploadedVideos.length > 0) {
+    extraContext.uploadedVideos.forEach((vid) => {
+      attachedMediaLines.push(`  - Uploaded Video [index ${vid.index}]: "${vid.name}"`);
+    });
+  }
+  if (extraContext?.uploadedPdfs && extraContext.uploadedPdfs.length > 0) {
+    extraContext.uploadedPdfs.forEach((pdf) => {
+      attachedMediaLines.push(`  - Uploaded Document [index ${pdf.index}]: "${pdf.name}"`);
+    });
+  }
+
+  const mediaManifest =
+    attachedMediaLines.length > 0
+      ? `\n**Attached User Files (Grounding Manifest):**\n${attachedMediaLines.join('\n')}\n`
+      : '';
+
+  const webContentSection = extraContext?.scrapedUrlText
+    ? `\n**Extracted Web Page Content (from ${dto.sourceUrl}):**\n${extraContext.scrapedUrlText.slice(0, 12000)}\n`
+    : '';
 
   // Difficulty tailored guidance
   let difficultyGuidance = '';
@@ -119,6 +186,8 @@ You are an elite educational assessment architect and competitive quiz designer.
 
 **User's Topic & Custom Instructions:**
 ${promptText}${sourceUrl}
+${mediaManifest}
+${webContentSection}
 
 **Quiz Specifications & Requirements:**
 1. **Total Questions:** Generate exactly ${count} questions.
@@ -127,16 +196,26 @@ ${difficultyGuidance}
 3. **Format Profile:** ${quizType}
 ${formatGuidance}
 
-**Core Pedagogical Rules:**
-1. **Multimodal Media Grounding:**
-   - If documents (PDFs, notes), diagrams/images, or video files are attached with this request, analyze their full visual, textual, mathematical, and conceptual contents thoroughly.
-   - Ground the questions directly in the facts, formulas, principles, architectures, and diagrams presented in the attached files.
-2. **Factual Integrity:** Every question and answer must be strictly accurate, unambiguous, and rooted in established science/facts.
-3. **Explanations:** Each question MUST include a concise, high-value "explanation" explaining why the correct answer is true and clarifying any common misjudgments.
-3. **Question Metadata:**
+**Core Pedagogical & Multimodal Grounding Rules:**
+1. **Source Grounding & Exhibit References:**
+   - If IMAGES are attached: Link questions to the specific uploaded image using type "IMAGE" and sourceIndex (0, 1, ...). Provide a caption describing the exhibit without stating the solution.
+   - If a VIDEO is attached: Identify the precise moment where the concept is taught. Use type "VIDEO_FRAME", timestamp (e.g. "01:45"), and a caption (e.g. "Scene at 01:45: Magnetic induction apparatus").
+   - If a PDF is attached: Ground the question in the document. Use type "PDF_PAGE", pageNumber (e.g. 4), and a caption (e.g. "Section 2.4 — Thermodynamic cycle").
+   - If a WEB URL was provided: Ground questions in the extracted article text, and use type "WEB_SOURCE" or "VERIFIED_CDN".
+   - If text-only or general topic: Use type "VERIFIED_CDN" and provide a 2 to 4 word academic searchKeyword (e.g. "Bloch sphere qubit", "mitochondria structure", "Doppler shift sound") so our verified Wikipedia/Wikimedia engine can display a real, permanent educational diagram.
+
+2. **CRITICAL ANTI-SPOILER RULE (ZERO ANSWER LEAKAGE):**
+   - The reference exhibit, frame, page, and caption are educational context ONLY.
+   - The caption and visual reference MUST NEVER state, label, circle, highlight, or reveal which option is correct!
+   - NEVER put the correct answer in the caption. (e.g. Do NOT say: "Figure showing that option B is correct").
+   - For diagrams with visible answers, ask about an unlabelled component, underlying principle, or consequence, rather than asking to read off what is visibly written.
+
+3. **Factual Integrity:** Every question and answer must be strictly accurate, unambiguous, and rooted in established science/facts.
+4. **Explanations:** Each question MUST include a concise, high-value "explanation" explaining why the correct answer is true and clarifying any common misjudgments.
+5. **Question Metadata:**
    - "level": Must be exactly "EASY", "MEDIUM", or "HARD".
    - "xp": Must be 100 for EASY, 200 for MEDIUM, or 300 for HARD.
-4. **Answer Index:**
+6. **Answer Index:**
    - "answer": 0-based integer index corresponding to the correct option in the "options" array.
 
 **Output Format (Strict):**

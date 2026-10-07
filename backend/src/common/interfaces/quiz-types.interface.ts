@@ -6,6 +6,14 @@ export interface IQuestion {
   explanation: string;
   level?: string;
   xp?: number;
+  reference?: {
+    type?: 'IMAGE' | 'VIDEO_FRAME' | 'PDF_PAGE' | 'WEB_SOURCE' | 'VERIFIED_CDN';
+    mediaUrl?: string;
+    caption?: string;
+    timestamp?: string;
+    pageNumber?: number;
+    sourceName?: string;
+  };
 }
 
 export interface IQuiz {

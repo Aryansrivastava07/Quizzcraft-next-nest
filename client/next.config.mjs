@@ -21,8 +21,28 @@ const nextConfig = {
         destination: `${backendUrl}/api/profile/:path*`,
       },
       {
+        source: '/api/org/:path*',
+        destination: `${backendUrl}/api/org/:path*`,
+      },
+      {
+        source: '/api/super-admin/:path*',
+        destination: `${backendUrl}/api/super-admin/:path*`,
+      },
+      {
+        source: '/api/groups/:path*',
+        destination: `${backendUrl}/api/groups/:path*`,
+      },
+      {
+        source: '/api/notifications/:path*',
+        destination: `${backendUrl}/api/notifications/:path*`,
+      },
+      {
         source: '/health/:path*',
         destination: `${backendUrl}/health/:path*`,
+      },
+      {
+        source: '/uploads/:path*',
+        destination: `${backendUrl}/uploads/:path*`,
       },
       {
         source: '/api/health/:path*',

@@ -208,6 +208,15 @@ export class QuizController {
     body: {
       title?: string;
       coverImage?: string;
+      accessMode?: 'PUBLIC' | 'PRIVATE' | 'ORGANIZATION';
+      organizationDomain?: string;
+      antiCheat?: boolean;
+      fullScreenLock?: boolean;
+      shuffleChoices?: boolean;
+      allowRetries?: boolean;
+      deploymentType?: 'LIVE' | 'SCHEDULED' | 'ANYTIME';
+      isDeployed?: boolean;
+      status?: 'DRAFT' | 'SCHEDULED' | 'LIVE' | 'ANYTIME' | 'ENDED';
       questions?: any[];
       immediateResult?: boolean;
       questime?: number;

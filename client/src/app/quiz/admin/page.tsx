@@ -164,7 +164,7 @@ function QuizAdminContent() {
         {/* Top Mission Control Banner */}
         <ParallaxReveal direction="up" distance={25} duration={700}>
           <div className="rounded-2xl p-6 sm:p-8 bg-surface-container-low/85 backdrop-blur-2xl border border-outline-variant/40 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-tertiary to-amber-accent" />
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-primary/40" />
             <div className="absolute -right-20 -top-20 w-80 h-80 rounded-full bg-primary/20 blur-[90px] pointer-events-none" />
 
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">

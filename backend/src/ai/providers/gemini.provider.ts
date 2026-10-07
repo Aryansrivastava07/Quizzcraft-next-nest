@@ -15,9 +15,10 @@ import {
 import {
   getFilesFromDto,
   UploadedFileWithMime,
-} from '../../common/utils/genFiles.util'; // Import UploadedFileWithMime
-import { promises as fs } from 'fs';
-import { IAiGeneratedQuizResponse } from '../../common/interfaces/quiz.interface'; // Renamed interface
+} from '../../common/utils/genFiles.util';
+import { IAiGeneratedQuizResponse } from '../../common/interfaces/quiz.interface';
+import { resolveQuizRelatedImage } from '../../quiz/utils/quiz-image.util';
+import { scrapeWebContent, ScrapedWebContent } from '../../quiz/utils/url-scraper.util';
 
 @Injectable()
 export class GeminiProvider implements AiProvider {
@@ -33,32 +34,29 @@ export class GeminiProvider implements AiProvider {
       this.configService.get<string>('GEMINI_MODEL') ?? 'gemini-3.5-flash-lite';
   }
 
-  private async _cleanupFiles(filePaths: string[]): Promise<void> {
-    try {
-      await Promise.all(filePaths.map((path) => fs.unlink(path)));
-    } catch (error) {
-      // Log the error but don't throw, as we want the main operation to succeed
-      // even if cleanup fails. You might want more robust logging here.
-      console.log('Error during file cleanup:', error);
-    }
-  }
-
   async generateQuiz(dto: generateQuizDto): Promise<IAiGeneratedQuizResponse> {
-    // Use new AI response interface
     let fileParts: any[] = [];
     let geminiUploads: any[] = [];
-    let uploads: UploadedFileWithMime[] = []; // Explicitly type uploads
+    let uploads: UploadedFileWithMime[] = [];
+    let imageUploads: UploadedFileWithMime[] = [];
+    let videoUploads: UploadedFileWithMime[] = [];
+    let pdfUploads: UploadedFileWithMime[] = [];
+
     try {
-      uploads = [
-        ...(await (getFilesFromDto(dto.images) ?? [])),
-        ...(await (getFilesFromDto(dto.videos) ?? [])),
-        ...(await (getFilesFromDto(dto.pdfs) ?? [])),
-      ];
-      // console.log(uploads)
+      imageUploads = await getFilesFromDto(dto.images, 'image');
+      videoUploads = await getFilesFromDto(dto.videos, 'video');
+      pdfUploads = await getFilesFromDto(dto.pdfs, 'pdf');
+      uploads = [...imageUploads, ...videoUploads, ...pdfUploads];
+
+      // Scrape web URL if provided
+      let scrapedWebContent: ScrapedWebContent | null = null;
+      if (dto.sourceUrl?.trim()) {
+        console.log(`[GeminiProvider] Ingesting content from source URL: ${dto.sourceUrl.trim()}...`);
+        scrapedWebContent = await scrapeWebContent(dto.sourceUrl.trim());
+      }
 
       if (uploads && uploads.length > 0) {
-        // Use Promise.all with .map to handle asynchronous operations in a loop correctly.
-        // .forEach does not wait for async operations to complete.
+        console.log(`[GeminiProvider] Uploading ${uploads.length} attached media file(s) to Gemini File API...`);
         const uploadPromises = uploads.map((element) => {
           return this.client.files.upload({
             file: element.path,
@@ -68,15 +66,12 @@ export class GeminiProvider implements AiProvider {
 
         geminiUploads = await Promise.all(uploadPromises);
 
-        // Wait for all files to become active. Videos and large files can take time to process.
+        // Wait for all files to become active (videos and large files can take time to process)
         const activeFilesPromises = geminiUploads.map(async (uploadedFile) => {
-          console.log(
-            `File ${uploadedFile.name} uploaded. Waiting for it to be processed...`,
-          );
           let file = uploadedFile;
           const startTime = Date.now();
           const timeout = 180000; // 3 minutes timeout for processing
-          const pollInterval = 5000; // Poll every 5 seconds
+          const pollInterval = 4000;
 
           while (
             file.state === 'PROCESSING' &&
@@ -85,15 +80,14 @@ export class GeminiProvider implements AiProvider {
             await new Promise((resolve) => setTimeout(resolve, pollInterval));
             try {
               file = await this.client.files.get({ name: uploadedFile.name });
-              console.log(`Current state of ${file.name}: ${file.state}`);
             } catch (e: any) {
               console.error(
-                `Error getting file status for ${uploadedFile.name}`,
-                e,
+                `Error getting file status for ${uploadedFile.name}:`,
+                e?.message,
               );
               throw new Error(e.message);
-            } // Closes catch block
-          } // Closes while loop
+            }
+          }
 
           if (file.state !== 'ACTIVE') {
             console.error(
@@ -104,14 +98,15 @@ export class GeminiProvider implements AiProvider {
             );
           }
 
-          console.log(`File ${file.name} is now ACTIVE.`);
           return file;
         });
+
         const activeFiles = await Promise.all(activeFilesPromises);
         fileParts = activeFiles.map((file) =>
           createPartFromUri(file.uri, file.mimeType),
         );
       }
+
       const modelCandidates = Array.from(
         new Set([
           this.model,
@@ -121,9 +116,16 @@ export class GeminiProvider implements AiProvider {
         ]),
       );
 
+      const promptString = generateQuizPrompt(dto, {
+        uploadedImages: imageUploads.map((img, i) => ({ index: i, name: img.originalname })),
+        uploadedVideos: videoUploads.map((vid, i) => ({ index: i, name: vid.originalname })),
+        uploadedPdfs: pdfUploads.map((pdf, i) => ({ index: i, name: pdf.originalname })),
+        scrapedUrlText: scrapedWebContent?.text,
+      });
+
       const userContent = createUserContent([
         ...fileParts,
-        generateQuizPrompt(dto),
+        promptString,
       ]);
 
       let responseText: string | null = null;
@@ -171,7 +173,7 @@ export class GeminiProvider implements AiProvider {
                 setTimeout(resolve, 1000 + Math.random() * 600),
               );
             } else {
-              break; // Switch to next candidate model
+              break;
             }
           }
         }
@@ -185,7 +187,47 @@ export class GeminiProvider implements AiProvider {
         throw lastError || new Error('All model candidates failed to generate quiz.');
       }
 
-      return JSON.parse(responseText);
+      const parsed: IAiGeneratedQuizResponse = JSON.parse(responseText);
+
+      // Ground and anchor references with verified public media URLs
+      if (parsed?.quiz?.questions && Array.isArray(parsed.quiz.questions)) {
+        for (let idx = 0; idx < parsed.quiz.questions.length; idx++) {
+          const q = parsed.quiz.questions[idx];
+          const ref = q.reference || ({} as any);
+
+          if (ref.type === 'IMAGE' && imageUploads.length > 0) {
+            const sIdx = Math.min(Math.max(0, ref.sourceIndex ?? 0), imageUploads.length - 1);
+            ref.mediaUrl = imageUploads[sIdx].publicUrl;
+            ref.sourceName = imageUploads[sIdx].originalname;
+          } else if (ref.type === 'VIDEO_FRAME' && videoUploads.length > 0) {
+            const sIdx = Math.min(Math.max(0, ref.sourceIndex ?? 0), videoUploads.length - 1);
+            ref.mediaUrl = videoUploads[sIdx].publicUrl;
+            ref.sourceName = videoUploads[sIdx].originalname;
+          } else if (ref.type === 'PDF_PAGE' && pdfUploads.length > 0) {
+            const sIdx = Math.min(Math.max(0, ref.sourceIndex ?? 0), pdfUploads.length - 1);
+            ref.mediaUrl = pdfUploads[sIdx].publicUrl;
+            ref.sourceName = pdfUploads[sIdx].originalname;
+          } else if (ref.type === 'WEB_SOURCE' && scrapedWebContent?.imageUrls?.length) {
+            ref.mediaUrl = scrapedWebContent.imageUrls[0];
+            ref.sourceName = dto.sourceUrl || '';
+          }
+
+          // Fallback to verified Wikipedia / Wikimedia Commons CDN if no local mediaUrl was anchored
+          if (!ref.mediaUrl) {
+            ref.type = 'VERIFIED_CDN';
+            const keyword = ref.searchKeyword || q.question;
+            ref.mediaUrl = await resolveQuizRelatedImage(keyword, dto.prompt);
+          }
+
+          if (!ref.caption || ref.caption.trim().length === 0) {
+            ref.caption = `Exhibit ${(idx + 1).toString().padStart(2, '0')} — Reference Exhibit`;
+          }
+
+          q.reference = ref;
+        }
+      }
+
+      return parsed;
     } catch (error: any) {
       if (error instanceof ApiError) {
         console.error('API Error:', error.message);
@@ -195,11 +237,16 @@ export class GeminiProvider implements AiProvider {
         throw new Error(`Unexpected Error: ${error.message}`);
       }
     } finally {
-      await this._cleanupFiles(uploads.map((file) => file.path) || []);
+      // NOTE: We intentionally PRESERVE the local files in `uploads/quiz/` so that students
+      // attempting the quiz can view their referenced images, video clips, and documents.
+      // We safely delete remote temporary files from the Gemini File API to release remote quota:
       for (const gemFile of geminiUploads) {
         if (gemFile?.name) {
           await this.client.files.delete({ name: gemFile.name }).catch((err: any) => {
-            console.warn(`[GeminiProvider] Remote file cleanup warning for ${gemFile.name}:`, err?.message);
+            console.warn(
+              `[GeminiProvider] Remote file cleanup warning for ${gemFile.name}:`,
+              err?.message,
+            );
           });
         }
       }

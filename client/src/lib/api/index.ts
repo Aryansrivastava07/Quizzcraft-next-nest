@@ -4,3 +4,6 @@ export * from "./client";
 export * from "./auth-service";
 export * from "./quiz-service";
 export * from "./profile-service";
+export * from "./org-service";
+export * from "./group-service";
+export * from "./notification-service";

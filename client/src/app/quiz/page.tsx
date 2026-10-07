@@ -29,6 +29,27 @@ interface ActiveQuizQuestion {
   correctText: string;
   explanation: string;
   visualCaption?: string;
+  reference?: {
+    type?: "IMAGE" | "VIDEO_FRAME" | "PDF_PAGE" | "WEB_SOURCE" | "VERIFIED_CDN";
+    mediaUrl?: string;
+    caption?: string;
+    timestamp?: string;
+    pageNumber?: number;
+    sourceName?: string;
+  };
+}
+
+function parseTimestampToSeconds(ts?: string): number {
+  if (!ts) return 0;
+  const parts = ts.split(":").map(Number);
+  if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    return parts[0] * 60 + parts[1];
+  }
+  if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+  const numeric = parseFloat(ts);
+  return isNaN(numeric) ? 0 : numeric;
 }
 
 function isCorrectOption(optText: string, optIdx: number, rawAnswer: any): boolean {
@@ -52,7 +73,7 @@ function ActiveQuizPlatformContent() {
 
   const [quizId, setQuizId] = useState<string | null>(null);
   const [quizPin, setQuizPin] = useState<string | null>(null);
-  const [quizTitle, setQuizTitle] = useState("Quantum Computing Principles");
+  const [quizTitle, setQuizTitle] = useState("Interactive Assessment");
   const [immediateResult, setImmediateResult] = useState(true);
   const [temporalLimit, setTemporalLimit] = useState(true);
   const [questime, setQuestime] = useState(60);
@@ -128,7 +149,7 @@ function ActiveQuizPlatformContent() {
           return;
         }
 
-        setQuizTitle(fetchedQuiz.title || "Quantum Computing Principles");
+        setQuizTitle(fetchedQuiz.title || "Interactive Assessment");
         setQuizId(fetchedQuiz.quizId);
         setQuizPin(fetchedQuiz.pin || pinParam || null);
         // Accommodate immediateResult, temporalLimit, questime, and dynamicShuffle columns from database
@@ -192,7 +213,14 @@ function ActiveQuizPlatformContent() {
             correctKey: correctOpt?.key || "A",
             correctText: correctOpt?.text || String(q.answer || ""),
             explanation,
-            visualCaption: `Fig ${(idx + 1).toString().padStart(2, "0")} — State Vector Telemetry & Neural Topology`,
+            visualCaption:
+              q.reference?.caption ||
+              `Exhibit ${(idx + 1).toString().padStart(2, "0")} — Reference Exhibit`,
+            reference: q.reference || {
+              type: "VERIFIED_CDN",
+              caption: `Exhibit ${(idx + 1).toString().padStart(2, "0")}`,
+              mediaUrl: fetchedQuiz?.coverImage,
+            },
           };
         });
 
@@ -464,7 +492,7 @@ function ActiveQuizPlatformContent() {
         <div className="max-w-max-width-canvas mx-auto w-full mt-3">
           <div className="h-1.5 w-full bg-surface-container-high rounded-full overflow-hidden relative shadow-inner">
             <div
-              className="h-full bg-gradient-to-r from-tertiary via-primary to-primary-container rounded-full relative transition-all duration-500 ease-out shadow-[0_0_12px_rgba(160,120,255,0.8)]"
+              className="h-full bg-primary rounded-full relative transition-all duration-500 ease-out shadow-[0_0_10px_rgba(139,92,246,0.4)]"
               style={{ width: `${Math.max(progressPct, 4)}%` }}
             >
               <div className="absolute right-0 top-0 bottom-0 w-2 bg-white rounded-full blur-[1px] opacity-80" />
@@ -526,26 +554,112 @@ function ActiveQuizPlatformContent() {
               <div className="lg:col-span-5 flex flex-col gap-3">
                 <div className="relative rounded-xl overflow-hidden border border-outline-variant/30 bg-surface-container-low group shadow-lg">
                   <div className="aspect-video sm:aspect-square w-full relative overflow-hidden bg-surface-container-lowest flex items-center justify-center">
-                    <img
-                      alt="Quantum circuit and neural topology visualization"
-                      className="w-full h-full object-cover object-center transform group-hover:scale-105 transition-transform duration-500 opacity-90 hover:opacity-100"
-                      src="/stitch/screen-6-cosmic-portal-3d.png"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-surface-container-lowest via-transparent to-transparent pointer-events-none" />
+                    {currentQ.reference?.type === "VIDEO_FRAME" && currentQ.reference?.mediaUrl ? (
+                      /* Video Player / Frame Snapshot */
+                      <div className="relative w-full h-full bg-black flex items-center justify-center">
+                        <video
+                          key={`${currentQ.reference.mediaUrl}-${currentQ.reference.timestamp}`}
+                          className="w-full h-full object-contain"
+                          src={`${currentQ.reference.mediaUrl}${
+                            currentQ.reference.timestamp
+                              ? `#t=${parseTimestampToSeconds(currentQ.reference.timestamp)}`
+                              : ""
+                          }`}
+                          controls
+                          playsInline
+                          preload="metadata"
+                        />
+                        {currentQ.reference.timestamp && (
+                          <div className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded bg-black/85 backdrop-blur-md border border-white/20 font-label-code text-[10px] text-amber-300 flex items-center gap-1 pointer-events-none">
+                            <span className="material-symbols-outlined text-xs">play_circle</span>
+                            <span>Frame @ {currentQ.reference.timestamp}</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : currentQ.reference?.type === "PDF_PAGE" ? (
+                      /* Document / PDF Page Exhibit */
+                      <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-br from-[#0c1020] to-[#12182c] text-center relative">
+                        <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/30 flex items-center justify-center mb-3 text-primary shadow-lg">
+                          <span className="material-symbols-outlined text-3xl">picture_as_pdf</span>
+                        </div>
+                        <span className="font-label-code text-xs font-semibold text-white">
+                          Document Exhibit
+                        </span>
+                        {currentQ.reference.pageNumber && (
+                          <span className="text-[11px] font-mono text-tertiary mt-1 px-2.5 py-0.5 rounded-full bg-tertiary/10 border border-tertiary/30">
+                            Page {currentQ.reference.pageNumber} Reference
+                          </span>
+                        )}
+                        <p className="text-[11px] text-on-surface-variant mt-2 max-w-xs line-clamp-2 italic">
+                          {currentQ.reference.caption || "Source Document Exhibit"}
+                        </p>
+                        {currentQ.reference.mediaUrl && (
+                          <a
+                            href={currentQ.reference.mediaUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-3 inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white text-[11px] transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-xs">open_in_new</span>
+                            <span>Open Source PDF</span>
+                          </a>
+                        )}
+                      </div>
+                    ) : (
+                      /* Image / Diagram / Verified CDN */
+                      <img
+                        alt={currentQ.reference?.caption || "Question Reference Exhibit"}
+                        className="w-full h-full object-cover object-center transform group-hover:scale-105 transition-transform duration-500 opacity-95 hover:opacity-100"
+                        src={
+                          currentQ.reference?.mediaUrl ||
+                          "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80"
+                        }
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src =
+                            "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1200&q=80";
+                        }}
+                      />
+                    )}
+
+                    <div className="absolute inset-0 bg-gradient-to-t from-surface-container-lowest/80 via-transparent to-transparent pointer-events-none" />
 
                     {/* Telemetry chip */}
                     <div className="absolute bottom-2.5 left-2.5 px-2.5 py-1 rounded bg-surface-container-lowest/85 backdrop-blur-md border border-outline-variant/30 font-label-code text-[11px] text-tertiary flex items-center gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-tertiary animate-pulse" />
                       <span>Level: {currentQ.level} ({currentQ.xp} XP)</span>
                     </div>
+
+                    {/* Source Anchor Badge */}
+                    <div className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded bg-surface-container-lowest/90 backdrop-blur-md border border-white/15 font-label-code text-[10px] text-on-surface-variant flex items-center gap-1">
+                      <span className="material-symbols-outlined text-xs text-primary">
+                        {currentQ.reference?.type === "VIDEO_FRAME"
+                          ? "videocam"
+                          : currentQ.reference?.type === "PDF_PAGE"
+                          ? "description"
+                          : currentQ.reference?.type === "IMAGE"
+                          ? "image"
+                          : "verified"}
+                      </span>
+                      <span>
+                        {currentQ.reference?.type === "VIDEO_FRAME"
+                          ? "Video Clip"
+                          : currentQ.reference?.type === "PDF_PAGE"
+                          ? "Document"
+                          : currentQ.reference?.type === "IMAGE"
+                          ? "Diagram"
+                          : "Verified Exhibit"}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="p-2.5 border-t border-outline-variant/20 bg-surface-container-low/70 flex items-center justify-between text-xs">
-                    <p className="font-body-sm text-[11px] text-on-surface-variant italic">
-                      {currentQ.visualCaption || `Fig ${currentQ.id} — State Vector Telemetry`}
+                    <p className="font-body-sm text-[11px] text-on-surface-variant italic truncate pr-2">
+                      {currentQ.reference?.caption ||
+                        currentQ.visualCaption ||
+                        `Exhibit ${currentQ.id.toString().padStart(2, "0")}`}
                     </p>
-                    <span className="font-label-code text-[10px] text-outline uppercase tracking-wider">
-                      Verified
+                    <span className="font-label-code text-[10px] text-emerald-400 uppercase tracking-wider shrink-0">
+                      Grounded
                     </span>
                   </div>
                 </div>
@@ -653,7 +767,7 @@ function ActiveQuizPlatformContent() {
 
                       {/* Side highlight stripe */}
                       {isSelected && (
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-tertiary to-primary-container" />
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-tertiary" />
                       )}
                     </button>
                   );

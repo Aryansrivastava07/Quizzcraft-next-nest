@@ -14,44 +14,44 @@ interface FeatureItem {
 
 const features: FeatureItem[] = [
   {
-    icon: "document_scanner",
+    icon: "picture_as_pdf",
     iconBg: "bg-primary-container/20 border-primary/30",
     iconColor: "text-primary",
-    title: "Document Intelligence",
+    title: "AI Document & PDF Engine",
     description:
-      "Upload complex PDFs, slides, and notes. Our AI extracts formulas, key facts, and definitions automatically.",
-    badge: "Smart Extraction",
+      "Upload complex textbook PDFs, lecture slides, research papers, and syllabi. Extracts formulas, definitions, and core concepts to generate bloom-calibrated questions in seconds.",
+    badge: "Top Highlight",
     badgeColor: "text-primary",
   },
   {
-    icon: "view_in_ar",
+    icon: "shield_lock",
+    iconBg: "bg-emerald-500/15 border-emerald-500/30",
+    iconColor: "text-emerald-400",
+    title: "Anti-Cheat Monitoring",
+    description:
+      "Enforce fullscreen lockdown, detect tab-switching, randomize question/choice sequences, and lock strict timers to guarantee academic assessment integrity.",
+    badge: "Proctored Exams",
+    badgeColor: "text-emerald-400",
+  },
+  {
+    icon: "hub",
     iconBg: "bg-tertiary-container/20 border-tertiary/30",
     iconColor: "text-tertiary",
-    title: "Interactive 3D UI",
+    title: "Institutional Cohorts",
     description:
-      "Engaging card animations, streak multipliers, and instant visual feedback designed for active recall.",
-    badge: "Spatial Engine",
+      "Organize learners into class cohorts with invite codes, question-linked discussion rooms, solution pinning, and automated gradebook matrices.",
+    badge: "Org Workspaces",
     badgeColor: "text-tertiary",
   },
   {
-    icon: "groups",
+    icon: "bolt",
     iconBg: "bg-amber-accent/15 border-amber-accent/30",
     iconColor: "text-amber-accent",
-    title: "Live Multiplayer",
+    title: "Synchronized Live Arena",
     description:
-      "Host live sessions with a quick 6-digit PIN. Real-time class leaderboards and answer distributions.",
+      "Host live synchronized exam rooms with quick PIN access. Real-time class leaderboards, answer distributions, and question-level diagnostics.",
     badge: "Instant Sync",
     badgeColor: "text-amber-accent",
-  },
-  {
-    icon: "insights",
-    iconBg: "bg-secondary-container/20 border-secondary/30",
-    iconColor: "text-secondary",
-    title: "Class Analytics",
-    description:
-      "Track student mastery, identify confusing topics, and export detailed results in one click.",
-    badge: "Deep Insights",
-    badgeColor: "text-secondary",
   },
 ];
 

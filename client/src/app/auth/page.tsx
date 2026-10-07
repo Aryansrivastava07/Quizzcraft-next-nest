@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import CosmicVoidCanvas from "@/components/canvas/CosmicVoidCanvas";
+import AuthFeatureCatalogue from "@/components/auth/AuthFeatureCatalogue";
 import { useAuth } from "@/lib/auth/auth-context";
 import { authService } from "@/lib/api/auth-service";
 import { formatApiError } from "@/lib/api/client";
@@ -13,14 +14,23 @@ type AuthMode = "signin" | "signup" | "verify-otp";
 function AuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectUrl = searchParams.get("redirect") || "/profile";
+  const urlOrg = searchParams.get("orgid") || searchParams.get("org") || "";
+  const urlGroup = searchParams.get("group") || searchParams.get("groupcode") || searchParams.get("code") || "";
+  const redirectUrl = searchParams.get("redirect") || (urlOrg ? `/${encodeURIComponent(urlOrg)}` : "/profile");
   const urlMode = searchParams.get("mode");
   const urlEmail = searchParams.get("email");
 
-  const { login, register, verifyRegisterOTP } = useAuth();
+  const { user, login, register, verifyRegisterOTP } = useAuth();
+
+  // If user is already authenticated and visits /auth?org=..., redirect immediately to the org workspace
+  useEffect(() => {
+    if (user && urlOrg) {
+      router.push(`/${encodeURIComponent(urlOrg)}`);
+    }
+  }, [user, urlOrg, router]);
 
   const [mode, setMode] = useState<AuthMode>(
-    urlMode === "verify" ? "verify-otp" : "signin"
+    urlMode === "verify" ? "verify-otp" : (urlOrg || urlGroup || urlMode === "signup") ? "signup" : "signin"
   );
   const [username, setUsername] = useState("");
   const [fullName, setFullName] = useState("");
@@ -39,6 +49,7 @@ function AuthContent() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [isExistingAccountForOrg, setIsExistingAccountForOrg] = useState(false);
 
   const otpInputsRef = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -144,7 +155,12 @@ function AuthContent() {
           setIsLoading(false);
           return;
         }
-        await login({ email: email.trim(), password });
+        await login({
+          email: email.trim(),
+          password,
+          orgId: urlOrg.trim() || undefined,
+          orgSlug: urlOrg.trim() || undefined,
+        });
         router.push(redirectUrl);
       } else if (mode === "signup") {
         const cleanUser = username.toLowerCase().trim();
@@ -191,6 +207,8 @@ function AuthContent() {
           password,
           phoneNumber: cleanPhone || undefined,
           institution: institution.trim() || undefined,
+          orgId: urlOrg.trim() || undefined,
+          groupCode: urlGroup.trim() || undefined,
         });
 
         // Switch immediately to 2FA / OTP Verification step!
@@ -219,7 +237,17 @@ function AuthContent() {
         }, 600);
       }
     } catch (err: any) {
-      setAuthError(formatApiError(err));
+      const formatted = formatApiError(err);
+      setAuthError(formatted);
+      if (
+        urlOrg &&
+        (err?.statusCode === 409 ||
+          formatted.toLowerCase().includes("already exist") ||
+          formatted.toLowerCase().includes("already registered") ||
+          formatted.toLowerCase().includes("taken"))
+      ) {
+        setIsExistingAccountForOrg(true);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -305,42 +333,9 @@ function AuthContent() {
       <div className="pointer-events-none fixed inset-0 z-10 bg-[radial-gradient(ellipse_at_center,transparent_10%,rgba(0,0,0,0.55)_50%,rgba(0,0,0,0.95)_100%)]" />
       <div className="pointer-events-none fixed inset-0 z-10 shadow-[inset_0_0_180px_rgba(0,0,0,0.95)]" />
 
-      {/* LEFT COLUMN: Visual Hero Art (ChatGPT asset) - Covers 100% height on desktop/tablet */}
-      <div className="hidden md:flex md:w-5/12 lg:w-1/2 relative h-full flex-col justify-start p-8 lg:p-12 overflow-hidden border-r border-white/10 bg-surface-container-lowest shrink-0 select-none z-20">
-        {/* Authentic 3D Cosmic artwork */}
-        <img
-          src="/images/auth-hero.png"
-          alt="QuizzCraft Cosmic Engine"
-          className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none transform scale-[1.02]"
-        />
-
-        {/* Deep Multi-Layered Cinematic Vignette System for Left Artwork */}
-        {/* 1. Heavy radial vignette darkening outer periphery */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_15%,rgba(0,0,0,0.5)_50%,rgba(5,7,13,0.95)_100%)] pointer-events-none" />
-        {/* 2. Top-down heavy shadow for header clarity */}
-        <div className="absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-[#05070d] via-[#05070d]/80 to-transparent pointer-events-none" />
-        {/* 3. Bottom-up heavy shadow */}
-        <div className="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-[#05070d] via-[#05070d]/90 to-transparent pointer-events-none" />
-        {/* 4. Left outer rim deep vignette */}
-        <div className="absolute inset-y-0 left-0 w-44 bg-gradient-to-r from-[#05070d] via-[#05070d]/80 to-transparent pointer-events-none" />
-        {/* 5. Right column seam deep vignette transition */}
-        <div className="absolute inset-y-0 right-0 w-48 bg-gradient-to-l from-[#05070d] via-[#05070d]/85 to-transparent pointer-events-none" />
-
-        {/* Clean Standard Brand Logo at top-left */}
-        <div className="relative z-10">
-          <Link href="/" className="inline-flex items-center gap-3 group">
-            <div className="w-10 h-10 rounded-xl overflow-hidden border border-outline-variant/40 flex items-center justify-center relative shadow-lg shadow-primary-container/10 group-hover:border-primary transition-all duration-300 group-hover:scale-105 bg-surface-container-high shrink-0">
-              <img
-                src="/images/logo-icon.png"
-                alt="QuizzCraft Logo"
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <span className="font-headline-sm text-base text-primary font-extrabold tracking-tight">
-              QuizzCraft<span className="text-tertiary">.app</span>
-            </span>
-          </Link>
-        </div>
+      {/* LEFT COLUMN: Interactive Feature & Usecase Catalogue */}
+      <div className="hidden md:flex md:w-5/12 lg:w-1/2 relative h-full flex-col justify-between p-6 sm:p-8 lg:p-10 overflow-hidden border-r border-white/10 bg-surface-container-lowest/70 backdrop-blur-2xl shrink-0 z-20">
+        <AuthFeatureCatalogue />
       </div>
 
       {/* RIGHT COLUMN: Authentication Studio Surface */}
@@ -403,6 +398,7 @@ function AuthContent() {
                   onClick={() => {
                     setMode("signin");
                     setAuthError(null);
+                    setIsExistingAccountForOrg(false);
                   }}
                   className={`px-4 py-1.5 rounded-full font-headline-sm text-xs font-semibold transition-all cursor-pointer ${
                     mode === "signin"
@@ -417,6 +413,7 @@ function AuthContent() {
                   onClick={() => {
                     setMode("signup");
                     setAuthError(null);
+                    setIsExistingAccountForOrg(false);
                   }}
                   className={`px-4 py-1.5 rounded-full font-headline-sm text-xs font-semibold transition-all cursor-pointer ${
                     mode === "signup"
@@ -436,6 +433,59 @@ function AuthContent() {
                 2-Factor Authentication
               </span>
               <span className="text-xs text-on-surface-variant">Step 2 of 2</span>
+            </div>
+          )}
+
+          {/* Org / Group Invitation Banner */}
+          {mode === "signup" && (urlOrg || urlGroup) && (
+            <div className="mb-4 p-3 rounded-2xl bg-primary/10 border border-primary/30 flex items-start gap-2.5">
+              <span className="material-symbols-outlined text-primary text-lg shrink-0 mt-0.5">
+                domain_verification
+              </span>
+              <div className="text-xs">
+                <p className="font-semibold text-white">
+                  Institutional Invitation
+                </p>
+                <p className="text-on-surface-variant text-[11px] mt-0.5">
+                  {urlOrg && (
+                    <span>
+                      Joining Organization: <strong className="text-primary font-mono">{urlOrg}</strong>.{" "}
+                    </span>
+                  )}
+                  {urlGroup && (
+                    <span>
+                      Enrolling in Cohort Group: <strong className="text-tertiary font-mono">{urlGroup}</strong>.
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Existing Account Prompt for Org Joining */}
+          {isExistingAccountForOrg && (
+            <div className="mb-4 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
+              <span className="material-symbols-outlined text-amber-400 text-lg shrink-0 mt-0.5">
+                account_circle
+              </span>
+              <div className="text-xs flex-1">
+                <p className="font-semibold text-white">Account Already Exists</p>
+                <p className="text-on-surface-variant text-[11px] mt-0.5 leading-relaxed">
+                  Your email is already registered on QuizzCraft. Sign in with your password to enroll your account into <strong className="text-primary font-mono">{urlOrg}</strong>.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("signin");
+                    setAuthError(null);
+                    setIsExistingAccountForOrg(false);
+                  }}
+                  className="mt-2.5 px-3 py-1.5 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white font-medium text-[11px] shadow-md shadow-primary-container/25 border border-white/10 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>Sign In to Join Workspace</span>
+                  <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -756,7 +806,7 @@ function AuthContent() {
                           !password.trim() ||
                           (phoneNumber.trim() !== "" && !isPhoneValid)))
                     }
-                    className="w-full py-2.5 px-6 rounded-xl bg-gradient-to-r from-primary-container to-secondary-container hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed text-white font-headline-sm text-xs font-semibold shadow-lg shadow-primary-container/25 border border-white/15 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-2.5 px-6 rounded-xl bg-primary-container hover:bg-primary-container/90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-headline-sm text-xs font-semibold shadow-lg shadow-primary-container/25 border border-white/15 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {isLoading ? (
                       <>
@@ -818,7 +868,7 @@ function AuthContent() {
                 <button
                   type="submit"
                   disabled={isLoading || otp.join("").length < 6}
-                  className="w-full py-2.5 px-6 rounded-xl bg-gradient-to-r from-primary-container to-secondary-container hover:brightness-110 text-white font-headline-sm text-xs font-semibold shadow-md shadow-primary-container/25 border border-white/15 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="w-full py-2.5 px-6 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white font-headline-sm text-xs font-semibold shadow-md shadow-primary-container/25 border border-white/15 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   {isLoading ? (
                     <>
@@ -907,6 +957,20 @@ function AuthContent() {
               <p className="mt-1 text-xs text-red-200/90 leading-relaxed break-words font-body-sm">
                 {authError}
               </p>
+              {isExistingAccountForOrg && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("signin");
+                    setAuthError(null);
+                    setIsExistingAccountForOrg(false);
+                  }}
+                  className="mt-2 px-3 py-1.5 rounded-lg bg-primary-container hover:bg-primary-container/90 text-white text-[11px] font-semibold shadow-sm border border-white/10 active:scale-95 transition-all flex items-center gap-1 cursor-pointer"
+                >
+                  <span>Sign In with this account</span>
+                  <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

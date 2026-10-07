@@ -952,7 +952,7 @@ function ProfileContent() {
                           className="w-full h-full object-cover rounded-full group-hover:scale-105 transition-transform duration-300"
                         />
                       ) : (
-                        <div className="w-full h-full rounded-full bg-gradient-to-tr from-primary-container to-tertiary/40 flex items-center justify-center text-white font-headline-xl font-bold text-2xl">
+                        <div className="w-full h-full rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center text-primary font-headline-xl font-bold text-2xl">
                           {(displayName || "E").slice(0, 2).toUpperCase()}
                         </div>
                       )}

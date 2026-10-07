@@ -33,10 +33,14 @@ export default function HeroSection() {
         {/* Left Copy Column with Parallax Reveal */}
         <div className="lg:col-span-7 flex flex-col items-start gap-5">
           <ParallaxReveal direction="up" distance={30} delay={150} duration={800}>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-xs font-semibold uppercase tracking-wider mb-2">
+              <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
+              AI PDF &amp; Document Ingestion Engine
+            </div>
             <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[52px] lg:leading-[1.15] font-display-hero font-extrabold tracking-tight text-white">
-              Turn Static Notes into{" "}
-              <span className="bg-gradient-to-r from-primary via-tertiary to-amber-accent bg-clip-text text-transparent drop-shadow-[0_0_35px_rgba(208,188,255,0.4)]">
-                Interactive 3D Quizzes
+              Turn Any PDF or Notes into{" "}
+              <span className="text-primary drop-shadow-[0_0_25px_rgba(208,188,255,0.35)]">
+                Proctored 3D Assessments
               </span>{" "}
               in Seconds
             </h1>
@@ -44,7 +48,7 @@ export default function HeroSection() {
 
           <ParallaxReveal direction="up" distance={25} delay={250} duration={800}>
             <p className="text-body-lg text-on-surface-variant max-w-2xl text-base sm:text-lg leading-relaxed">
-              Upload course notes, syllabi, or slides. Automatically extract key concepts, build adaptive questions, and host real-time interactive game arenas.
+              Upload curriculum PDFs, lecture slides, or research papers. Automatically extract formulas and key facts, build adaptive questions, and deploy anti-cheat testing arenas or student cohorts.
             </p>
           </ParallaxReveal>
 
@@ -52,7 +56,7 @@ export default function HeroSection() {
           <ParallaxReveal direction="up" distance={25} delay={350} duration={800} className="w-full">
             <div className="w-full flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
               <Link
-                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-gradient-to-r from-primary-container via-secondary-container to-tertiary text-white font-headline-sm text-sm font-semibold shadow-xl shadow-primary-container/25 hover:shadow-primary-container/50 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white font-headline-sm text-sm font-semibold shadow-lg shadow-primary-container/25 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer border border-white/10"
                 href="/create"
               >
                 <span className="material-symbols-outlined text-lg">bolt</span>

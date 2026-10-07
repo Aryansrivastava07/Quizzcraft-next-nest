@@ -85,14 +85,24 @@ export class QuizService implements OnModuleInit {
       if (!dto.prompt || !dto.prompt.trim()) {
         if (fileNames.length > 0) {
           dto.prompt = `Generate a high-yield, comprehensive educational quiz covering the key concepts, formulas, and facts presented in the attached materials: ${fileNames.join(', ')}.`;
+        } else if (dto.sourceUrl?.trim()) {
+          dto.prompt = `Generate a high-yield, comprehensive educational quiz covering the key concepts from the source URL: ${dto.sourceUrl.trim()}`;
         } else {
-          dto.prompt = 'General Knowledge and Applied Science';
+          throw new BadRequestException(
+            'Please provide a topic prompt, attach media files (PDF, Image, or Video), or specify a web URL.',
+          );
         }
       }
 
       const generatedQuiz: IAiGeneratedQuizResponse =
         await this.ai.generateQuiz(dto);
       try {
+        // Resolve a topic-related image (Wikipedia / verified CDN preset; zero AI URL hallucinations)
+        const coverImage = await resolveQuizRelatedImage(
+          generatedQuiz.quiz.title,
+          dto.prompt,
+        );
+
         const questions = generatedQuiz.quiz.questions.map((question, idx) => {
           const rawLevel = String((question as any).level || (idx % 3 === 0 ? 'EASY' : idx % 3 === 1 ? 'MEDIUM' : 'HARD')).toUpperCase();
           const level = rawLevel === 'EASY' ? 'EASY' : rawLevel === 'HARD' ? 'HARD' : 'MEDIUM';
@@ -100,19 +110,19 @@ export class QuizService implements OnModuleInit {
           return {
             ...question,
             questionId: randomUUID(),
+            answer: String(question.answer),
             level,
             xp,
             explanation: question.explanation || '',
+            reference: question.reference || {
+              type: 'VERIFIED_CDN',
+              caption: `Exhibit ${(idx + 1).toString().padStart(2, '0')}`,
+              mediaUrl: coverImage,
+            },
           };
         });
 
         const pin = await this.generateUniquePin();
-
-        // Resolve a topic-related image (Wikipedia / verified CDN preset; zero AI URL hallucinations)
-        const coverImage = await resolveQuizRelatedImage(
-          generatedQuiz.quiz.title,
-          dto.prompt,
-        );
 
         const newQuiz: IQuiz = {
           quizId: randomUUID(),
@@ -204,7 +214,33 @@ export class QuizService implements OnModuleInit {
       }
     }
 
-    if (!quiz.coverImage) {
+    // 1b. Check Organization Membership Control
+    if (quiz.orgId) {
+      const normalizedUserEmail = (userEmail || '').toLowerCase().trim();
+      if (!normalizedUserEmail) {
+        return {
+          message: 'Organization membership required',
+          data: {
+            isRestricted: true,
+            message: 'This quiz is exclusive to organization members. Please log in to join.',
+          },
+        };
+      }
+      const user = await this.UserModel.findOne({
+        $or: [{ email: normalizedUserEmail }, { emails: normalizedUserEmail }],
+      }).lean();
+      if (!user || (user.orgId !== quiz.orgId && user.role !== 'SUPER_ADMIN')) {
+        return {
+          message: 'Organization membership unauthorized',
+          data: {
+            isRestricted: true,
+            message: 'Access denied. You must be an enrolled member of this organization to access this quiz.',
+          },
+        };
+      }
+    }
+
+    if (!quiz.coverImage || quiz.coverImage.includes('photo-1518770660439-4636190af475')) {
       const resolved = await resolveQuizRelatedImage(quiz.title);
       quiz.coverImage = resolved;
       await quiz.save().catch(() => {});
@@ -269,15 +305,20 @@ export class QuizService implements OnModuleInit {
   }
 
   async getQuiz(quizId: string): Promise<ServiceResponse<{ quiz: Quiz & IQuiz; stats?: { peopleAttempted: number; averageScore: number } }>> {
-    let quiz = await this.QuizModel.findOne({ quizId });
-    if (!quiz && quizId.length === 6 && /^\d+$/.test(quizId)) {
-      quiz = await this.QuizModel.findOne({ pin: quizId });
+    const cleanId = quizId ? quizId.trim() : '';
+    const cleanPin = cleanId.replace(/\D/g, '');
+    let quiz = await this.QuizModel.findOne({ quizId: cleanId });
+    if (!quiz && cleanPin && cleanPin.length === 6) {
+      quiz = await this.QuizModel.findOne({ pin: cleanPin });
+    }
+    if (!quiz && cleanId.length === 24 && /^[0-9a-fA-F]{24}$/.test(cleanId)) {
+      quiz = await this.QuizModel.findById(cleanId);
     }
     if (!quiz) {
       throw new NotFoundException('No Quiz found for this Id');
     }
 
-    if (!quiz.coverImage) {
+    if (!quiz.coverImage || quiz.coverImage.includes('photo-1518770660439-4636190af475')) {
       const resolved = await resolveQuizRelatedImage(quiz.title);
       quiz.coverImage = resolved;
       await quiz.save().catch(() => {});
@@ -314,6 +355,15 @@ export class QuizService implements OnModuleInit {
     updateData: {
       title?: string;
       coverImage?: string;
+      accessMode?: 'PUBLIC' | 'PRIVATE' | 'ORGANIZATION';
+      organizationDomain?: string;
+      antiCheat?: boolean;
+      fullScreenLock?: boolean;
+      shuffleChoices?: boolean;
+      allowRetries?: boolean;
+      deploymentType?: 'LIVE' | 'SCHEDULED' | 'ANYTIME';
+      isDeployed?: boolean;
+      status?: 'DRAFT' | 'SCHEDULED' | 'LIVE' | 'ANYTIME' | 'ENDED';
       questions?: any[];
       immediateResult?: boolean;
       questime?: number;
@@ -321,7 +371,15 @@ export class QuizService implements OnModuleInit {
       temporalLimit?: boolean;
     },
   ): Promise<ServiceResponse<{ updated: boolean }>> {
-    const quiz = await this.QuizModel.findOne({ quizId });
+    const cleanId = quizId ? quizId.trim() : '';
+    const cleanPin = cleanId.replace(/\D/g, '');
+    let quiz = await this.QuizModel.findOne({ quizId: cleanId });
+    if (!quiz && cleanPin && cleanPin.length === 6) {
+      quiz = await this.QuizModel.findOne({ pin: cleanPin });
+    }
+    if (!quiz && cleanId.length === 24 && /^[0-9a-fA-F]{24}$/.test(cleanId)) {
+      quiz = await this.QuizModel.findById(cleanId);
+    }
     if (!quiz) {
       throw new NotFoundException('No Quiz found for this Id');
     }
@@ -332,6 +390,36 @@ export class QuizService implements OnModuleInit {
     }
     if (updateData.coverImage !== undefined) {
       setPayload.coverImage = updateData.coverImage;
+    }
+    if (updateData.accessMode !== undefined) {
+      setPayload.accessMode = updateData.accessMode;
+      if (updateData.accessMode === 'PUBLIC') {
+        setPayload.isPractice = false;
+      }
+    }
+    if (updateData.organizationDomain !== undefined) {
+      setPayload.organizationDomain = updateData.organizationDomain;
+    }
+    if (updateData.antiCheat !== undefined) {
+      setPayload.antiCheat = Boolean(updateData.antiCheat);
+    }
+    if (updateData.fullScreenLock !== undefined) {
+      setPayload.fullScreenLock = Boolean(updateData.fullScreenLock);
+    }
+    if (updateData.shuffleChoices !== undefined) {
+      setPayload.shuffleChoices = Boolean(updateData.shuffleChoices);
+    }
+    if (updateData.allowRetries !== undefined) {
+      setPayload.allowRetries = Boolean(updateData.allowRetries);
+    }
+    if (updateData.deploymentType !== undefined) {
+      setPayload.deploymentType = updateData.deploymentType;
+    }
+    if (updateData.isDeployed !== undefined) {
+      setPayload.isDeployed = Boolean(updateData.isDeployed);
+    }
+    if (updateData.status !== undefined) {
+      setPayload.status = updateData.status;
     }
     if (updateData.immediateResult !== undefined) {
       setPayload.immediateResult = updateData.immediateResult;
@@ -366,7 +454,7 @@ export class QuizService implements OnModuleInit {
     }
 
     const result = await this.QuizModel.updateOne(
-      { quizId },
+      { _id: quiz._id },
       { $set: setPayload },
     );
     if (result.matchedCount === 0) {
@@ -720,6 +808,13 @@ export class QuizService implements OnModuleInit {
       liveUntil = null;
     }
 
+    const isOrgUser = user.role === 'ORG_STD' || (user.role as string) === 'ORG_USER';
+    const isPracticeFinal = isOrgUser ? true : (dto.isPractice ?? false);
+    const accessModeFinal = isOrgUser ? 'PRIVATE' : accessMode;
+    const orgIdFinal = user.orgId || null;
+    const groupIdFinal = (!isOrgUser && dto.groupId) ? dto.groupId : null;
+    const dueDateFinal = (!isOrgUser && dto.dueDate) ? new Date(dto.dueDate) : null;
+
     const updated = await this.QuizModel.findOneAndUpdate(
       { quizId },
       {
@@ -728,7 +823,7 @@ export class QuizService implements OnModuleInit {
           ownerId: userId,
           ownerEmail: user.email,
           deploymentType,
-          accessMode,
+          accessMode: accessModeFinal,
           organizationDomain,
           status,
           scheduledFor,
@@ -739,7 +834,10 @@ export class QuizService implements OnModuleInit {
           fullScreenLock: dto.fullScreenLock ?? true,
           shuffleChoices: dto.shuffleChoices ?? true,
           allowRetries: dto.allowRetries ?? false,
-          isPractice: dto.isPractice ?? false,
+          isPractice: isPracticeFinal,
+          orgId: orgIdFinal,
+          groupId: groupIdFinal,
+          dueDate: dueDateFinal,
         },
       },
       { new: true },
@@ -815,7 +913,7 @@ export class QuizService implements OnModuleInit {
 
     const averageScore = completedCount > 0 ? Math.round(totalScoreSum / completedCount) : 0;
 
-    if (!quiz.coverImage) {
+    if (!quiz.coverImage || quiz.coverImage.includes('photo-1518770660439-4636190af475')) {
       quiz.coverImage = await resolveQuizRelatedImage(quiz.title);
       await quiz.save().catch(() => {});
     }
@@ -933,9 +1031,8 @@ export class QuizService implements OnModuleInit {
     const skip = (page - 1) * limit;
 
     const filter: any = {
-      isDeployed: true,
       accessMode: 'PUBLIC',
-      status: { $ne: 'DRAFT', $in: ['LIVE', 'SCHEDULED', 'ANYTIME', 'ENDED'] },
+      status: { $in: ['LIVE', 'SCHEDULED', 'ANYTIME', 'ENDED'] },
     };
 
     if (query.search && query.search.trim()) {
@@ -1156,7 +1253,7 @@ export class QuizService implements OnModuleInit {
       (quiz.status === 'SCHEDULED' && quiz.scheduledFor && new Date() >= new Date(quiz.scheduledFor));
 
     let coverImage = quiz.coverImage;
-    if (!coverImage) {
+    if (!coverImage || coverImage.includes('photo-1518770660439-4636190af475')) {
       coverImage = await resolveQuizRelatedImage(quiz.title);
       quiz.coverImage = coverImage;
       await quiz.save().catch(() => {});

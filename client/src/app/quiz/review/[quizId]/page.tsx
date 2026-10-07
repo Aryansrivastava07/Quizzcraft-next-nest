@@ -261,7 +261,7 @@ export default function QuizReviewPage({ params }: PageProps) {
                     <div className="flex flex-wrap items-center gap-4 text-xs text-on-surface-variant pt-1">
                       {/* Creator info */}
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-primary to-tertiary flex items-center justify-center text-white text-[10px] font-bold uppercase overflow-hidden shrink-0">
+                        <div className="w-6 h-6 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center text-primary text-[10px] font-bold uppercase overflow-hidden shrink-0">
                           {reviewData.owner.avatar ? (
                             <img src={reviewData.owner.avatar} alt="" className="w-full h-full object-cover" />
                           ) : (
@@ -422,10 +422,10 @@ export default function QuizReviewPage({ params }: PageProps) {
                       const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : "🥉";
                       const borderGlow =
                         idx === 0
-                          ? "border-amber-400/40 bg-gradient-to-b from-amber-500/10 to-surface-container-low/90"
+                          ? "border-amber-400/50 bg-surface-container-low/90"
                           : idx === 1
-                          ? "border-slate-300/40 bg-gradient-to-b from-slate-400/10 to-surface-container-low/90"
-                          : "border-amber-700/40 bg-gradient-to-b from-amber-700/10 to-surface-container-low/90";
+                          ? "border-slate-300/40 bg-surface-container-low/90"
+                          : "border-amber-700/50 bg-surface-container-low/90";
 
                       return (
                         <div

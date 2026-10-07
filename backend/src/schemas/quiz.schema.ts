@@ -26,6 +26,15 @@ export class Quiz {
   @Prop({ type: String, enum: ['PUBLIC', 'PRIVATE', 'ORGANIZATION'], default: 'PUBLIC' })
   accessMode?: 'PUBLIC' | 'PRIVATE' | 'ORGANIZATION';
 
+  @Prop({ type: String, default: null, index: true })
+  orgId?: string | null;
+
+  @Prop({ type: String, default: null, index: true })
+  groupId?: string | null;
+
+  @Prop({ type: Date, default: null })
+  dueDate?: Date | null;
+
   @Prop({ type: String, default: null })
   organizationDomain?: string;
 
@@ -90,6 +99,18 @@ export class Quiz {
         explanation: { type: String, default: '' },
         level: { type: String, default: 'MEDIUM' },
         xp: { type: Number, default: 200 },
+        reference: {
+          type: {
+            type: String,
+            enum: ['IMAGE', 'VIDEO_FRAME', 'PDF_PAGE', 'WEB_SOURCE', 'VERIFIED_CDN'],
+            default: 'VERIFIED_CDN',
+          },
+          mediaUrl: { type: String, default: '' },
+          caption: { type: String, default: '' },
+          timestamp: { type: String, default: '' },
+          pageNumber: { type: Number, default: null },
+          sourceName: { type: String, default: '' },
+        },
       },
     ],
     required: true,
@@ -102,6 +123,14 @@ export class Quiz {
     explanation: string;
     level?: string;
     xp?: number;
+    reference?: {
+      type?: 'IMAGE' | 'VIDEO_FRAME' | 'PDF_PAGE' | 'WEB_SOURCE' | 'VERIFIED_CDN';
+      mediaUrl?: string;
+      caption?: string;
+      timestamp?: string;
+      pageNumber?: number;
+      sourceName?: string;
+    };
   }[];
 }
 
