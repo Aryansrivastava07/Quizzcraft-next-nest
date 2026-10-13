@@ -21,7 +21,7 @@ export const scheduledQuizAlertMail: MailConfig<ScheduledQuizAlertMailData> = {
     });
 
     const baseUrl = process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
-    const adminUrl = `${baseUrl}/quiz/admin?quizId=${encodeURIComponent(quizId)}`;
+    const adminUrl = `${baseUrl}/quiz/review/${encodeURIComponent(quizId)}`;
 
     const contentHtml = `
       <!-- Emergency Countdown Banner -->

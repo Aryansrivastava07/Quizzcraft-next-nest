@@ -9,6 +9,7 @@ import { orgService } from "@/lib/api/org-service";
 import { useAuth } from "@/lib/auth/auth-context";
 import { Quiz, Organization } from "@/lib/api/types";
 import { formatApiError } from "@/lib/api/client";
+import CopyQuizModal from "@/components/quiz/CopyQuizModal";
 
 export default function OrgSlugQuizzesPage() {
   const params = useParams();
@@ -36,6 +37,7 @@ function OrgQuizzesContent({
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [search, setSearch] = useState("");
+  const [copyTargetQuiz, setCopyTargetQuiz] = useState<Quiz | null>(null);
 
   useEffect(() => {
     loadQuizzes();
@@ -223,18 +225,35 @@ function OrgQuizzesContent({
 
                   {isPartnerOrAdmin && (
                     <Link
-                      href={`/quiz/admin?quizId=${encodeURIComponent(quiz.quizId)}`}
+                      href={`/quiz/review/${encodeURIComponent(quiz.quizId)}`}
                       className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-white border border-white/10 transition-colors"
-                      title="Proctor / Admin Console"
+                      title="Quiz Review & Leaderboard"
                     >
                       <span className="material-symbols-outlined text-base">monitoring</span>
                     </Link>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => setCopyTargetQuiz(quiz)}
+                    className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-white border border-white/10 transition-colors cursor-pointer"
+                    title="Create a Copy in Different Workspace"
+                  >
+                    <span className="material-symbols-outlined text-base">content_copy</span>
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         )}
+
+        {/* Copy / Duplicate Quiz Modal */}
+        <CopyQuizModal
+          isOpen={!!copyTargetQuiz}
+          quiz={copyTargetQuiz}
+          onClose={() => setCopyTargetQuiz(null)}
+          onSuccess={() => loadQuizzes()}
+        />
       </main>
     </div>
   );

@@ -2,6 +2,7 @@ import { User } from "../../schemas/user.schema";
 import { LoginAuthResponseDto, RegisterAuthResponseDto, MeAuthResponseDto } from "../dto/auth.response.dto";
 
 export const toLoginDto = (user: User): LoginAuthResponseDto => ({
+    userId: String((user as any)._id || (user as any).userId || (user as any).id || ''),
     username: user.username,
     email: user.email,
     emails: user.emails && user.emails.length > 0 ? user.emails : [user.email],
@@ -19,6 +20,7 @@ export const toLoginDto = (user: User): LoginAuthResponseDto => ({
 });
 
 export const toRegisterDto = (user: User): RegisterAuthResponseDto => ({
+    userId: String((user as any)._id || (user as any).userId || (user as any).id || ''),
     username: user.username,
     email: user.email,
     verified: user.verified,
@@ -33,6 +35,7 @@ export const toRegisterDto = (user: User): RegisterAuthResponseDto => ({
 });
 
 export const toMeDto = (user: User): MeAuthResponseDto => ({
+    userId: String((user as any)._id || (user as any).userId || (user as any).id || ''),
     username: user.username,
     email: user.email,
     emails: user.emails && user.emails.length > 0 ? user.emails : [user.email],

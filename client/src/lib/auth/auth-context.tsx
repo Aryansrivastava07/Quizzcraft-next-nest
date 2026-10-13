@@ -10,6 +10,13 @@ interface AuthContextType {
   isLoading: boolean;
   error: string | null;
   login: (dto: LoginAuthDto) => Promise<void>;
+  loginWithGoogle: (dto: {
+    credential?: string;
+    idToken?: string;
+    orgId?: string;
+    orgSlug?: string;
+    groupCode?: string;
+  }) => Promise<void>;
   register: (dto: RegisterAuthDto) => Promise<{ message: string }>;
   verifyRegisterOTP: (dto: { email: string; OTP: string }) => Promise<void>;
   logout: () => Promise<void>;
@@ -143,6 +150,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const loginWithGoogle = async (dto: {
+    credential?: string;
+    idToken?: string;
+    orgId?: string;
+    orgSlug?: string;
+    groupCode?: string;
+  }) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await authService.loginWithGoogle(dto);
+      if (response?.data?.user) {
+        setUser(response.data.user);
+      } else {
+        await refreshUser();
+      }
+    } catch (err: any) {
+      const formatted = formatApiError(err);
+      setError(formatted);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -150,6 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         error,
         login,
+        loginWithGoogle,
         register,
         verifyRegisterOTP,
         logout,

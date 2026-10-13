@@ -13,6 +13,7 @@ import { authService } from "@/lib/api/auth-service";
 import { formatApiError } from "@/lib/api/client";
 import { UserSettings } from "@/lib/api/types";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import CopyQuizModal from "@/components/quiz/CopyQuizModal";
 
 type ActiveTab =
   | "profile"
@@ -112,12 +113,13 @@ function ProfileContent() {
 
   // My Quizzes filter & search
   const [quizSearch, setQuizSearch] = useState("");
-  const [quizFilter, setQuizFilter] = useState<"ALL" | "ACTIVE" | "DRAFT">("ALL");
+  const [quizFilter, setQuizFilter] = useState<"ALL" | "LIVE" | "ANYTIME" | "SCHEDULED" | "DRAFT">("ALL");
 
   // Real Created Quizzes state from Backend
   const [createdQuizzes, setCreatedQuizzes] = useState<any[]>([]);
   const [quizzesLoading, setQuizzesLoading] = useState<boolean>(true);
   const [quizzesError, setQuizzesError] = useState<string | null>(null);
+  const [copyTargetQuiz, setCopyTargetQuiz] = useState<{ quizId: string; title: string } | null>(null);
 
   // Real Attempted Quizzes state from Backend
   const [attemptedQuizzes, setAttemptedQuizzes] = useState<any[]>([]);
@@ -358,23 +360,33 @@ function ProfileContent() {
     try {
       const res = await profileService.getQuizzes();
       if (res?.data?.quizzes) {
-        const mapped = res.data.quizzes.map((q: any) => ({
-          id: q.quizId || q._id,
-          title: q.title || "AI Generated Quiz",
-          questionsCount: q.questions?.length || 0,
-          playsCount: 0,
-          avgScore: q.isDeployed ? "Active" : "Draft",
-          status: q.isDeployed ? (q.status || "DEPLOYED") : "DRAFT",
-          isDeployed: Boolean(q.isDeployed),
-          topic: q.questions?.[0]?.question ? "AI & Science" : "General Study",
-          date: q.createdAt
-            ? new Date(q.createdAt).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })
-            : "Active Node",
-        }));
+        const mapped = res.data.quizzes.map((q: any) => {
+          const rawStatus = (q.status || (q.isDeployed ? "ANYTIME" : "DRAFT")).toUpperCase();
+          const validStatus: "DRAFT" | "LIVE" | "SCHEDULED" | "ANYTIME" | "ENDED" =
+            ["DRAFT", "ANYTIME", "SCHEDULED", "LIVE", "ENDED"].includes(rawStatus)
+              ? (rawStatus as any)
+              : q.isDeployed ? "ANYTIME" : "DRAFT";
+          return {
+            id: q.quizId || q._id,
+            quizId: q.quizId || q._id,
+            title: q.title || "AI Generated Quiz",
+            questionsCount: q.questions?.length || 0,
+            playsCount: 0,
+            pin: q.pin,
+            avgScore: validStatus,
+            status: validStatus,
+            deploymentType: q.deploymentType || "ANYTIME",
+            isDeployed: Boolean(q.isDeployed),
+            topic: q.questions?.[0]?.question ? "AI & Science" : "General Study",
+            date: q.createdAt
+              ? new Date(q.createdAt).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })
+              : "Active Node",
+          };
+        });
         setCreatedQuizzes(mapped);
       }
     } catch (err: any) {
@@ -882,10 +894,13 @@ function ProfileContent() {
 
   const filteredCreatedQuizzes = createdQuizzes.filter((q) => {
     const matchesFilter = quizFilter === "ALL" || q.status === quizFilter;
+    const s = quizSearch.toLowerCase().trim();
     const matchesSearch =
-      q.title.toLowerCase().includes(quizSearch.toLowerCase()) ||
-      q.topic.toLowerCase().includes(quizSearch.toLowerCase()) ||
-      q.id.toLowerCase().includes(quizSearch.toLowerCase());
+      !s ||
+      q.title.toLowerCase().includes(s) ||
+      q.topic.toLowerCase().includes(s) ||
+      q.id.toLowerCase().includes(s) ||
+      (q.pin && q.pin.includes(s));
     return matchesFilter && matchesSearch;
   });
 
@@ -1085,7 +1100,7 @@ function ProfileContent() {
                       {quizzesLoading ? "..." : createdQuizzes.length}
                     </span>
                     <span className="text-xs text-primary font-label-code font-semibold">
-                      ({createdQuizzes.filter((q) => q.status === "ACTIVE").length} Active)
+                      ({createdQuizzes.filter((q) => q.status !== "DRAFT").length} Deployed)
                     </span>
                   </div>
                 </div>
@@ -1822,7 +1837,7 @@ function ProfileContent() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <div className="inline-flex p-1 rounded-full bg-surface-container-high border border-outline-variant/30 text-xs font-headline-sm">
+                      <div className="inline-flex p-1 rounded-full bg-surface-container-high border border-outline-variant/30 text-xs font-headline-sm flex-wrap gap-1">
                         <button
                           type="button"
                           onClick={() => setQuizFilter("ALL")}
@@ -1836,25 +1851,51 @@ function ProfileContent() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setQuizFilter("ACTIVE")}
-                          className={`px-3 py-1 rounded-full font-semibold transition-all ${
-                            quizFilter === "ACTIVE"
-                              ? "bg-primary text-on-primary shadow-sm"
-                              : "text-on-surface-variant hover:text-white"
+                          onClick={() => setQuizFilter("LIVE")}
+                          className={`px-3 py-1 rounded-full font-semibold transition-all flex items-center gap-1 ${
+                            quizFilter === "LIVE"
+                              ? "bg-emerald-500 text-white shadow-sm"
+                              : "text-emerald-400 hover:text-white"
                           }`}
                         >
-                          Active ({createdQuizzes.filter((q) => q.status === "ACTIVE").length})
+                          <span>🟢 Live</span>
+                          <span>({createdQuizzes.filter((q) => q.status === "LIVE").length})</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setQuizFilter("ANYTIME")}
+                          className={`px-3 py-1 rounded-full font-semibold transition-all flex items-center gap-1 ${
+                            quizFilter === "ANYTIME"
+                              ? "bg-cyan-500 text-white shadow-sm"
+                              : "text-cyan-300 hover:text-white"
+                          }`}
+                        >
+                          <span>⚡ Anytime</span>
+                          <span>({createdQuizzes.filter((q) => q.status === "ANYTIME").length})</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setQuizFilter("SCHEDULED")}
+                          className={`px-3 py-1 rounded-full font-semibold transition-all flex items-center gap-1 ${
+                            quizFilter === "SCHEDULED"
+                              ? "bg-amber-500 text-white shadow-sm"
+                              : "text-amber-300 hover:text-white"
+                          }`}
+                        >
+                          <span>⏱️ Scheduled</span>
+                          <span>({createdQuizzes.filter((q) => q.status === "SCHEDULED").length})</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => setQuizFilter("DRAFT")}
-                          className={`px-3 py-1 rounded-full font-semibold transition-all ${
+                          className={`px-3 py-1 rounded-full font-semibold transition-all flex items-center gap-1 ${
                             quizFilter === "DRAFT"
-                              ? "bg-primary text-on-primary shadow-sm"
-                              : "text-on-surface-variant hover:text-white"
+                              ? "bg-slate-600 text-white shadow-sm"
+                              : "text-slate-400 hover:text-white"
                           }`}
                         >
-                          Drafts ({createdQuizzes.filter((q) => q.status === "DRAFT").length})
+                          <span>📝 Drafts</span>
+                          <span>({createdQuizzes.filter((q) => q.status === "DRAFT").length})</span>
                         </button>
                       </div>
 
@@ -1951,17 +1992,42 @@ function ProfileContent() {
                               <span className="font-label-code text-[11px] px-2.5 py-0.5 rounded-full bg-surface-container-high text-tertiary border border-outline-variant/40 font-bold">
                                 {quiz.id}
                               </span>
-                              <span
-                                className={`text-[10px] font-label-code px-2 py-0.5 rounded font-bold uppercase ${
-                                  quiz.status === "DRAFT"
-                                    ? "bg-slate-500/20 text-slate-300 border border-slate-500/30"
-                                    : quiz.status === "LIVE"
-                                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                                    : "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
-                                }`}
-                              >
-                                {quiz.status}
-                              </span>
+                              {quiz.status === "DRAFT" && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-label-code px-2.5 py-0.5 rounded font-bold uppercase bg-slate-500/20 text-slate-300 border border-slate-500/30">
+                                  <span className="material-symbols-outlined text-xs">edit_document</span>
+                                  DRAFT
+                                </span>
+                              )}
+                              {quiz.status === "ANYTIME" && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-label-code px-2.5 py-0.5 rounded font-bold uppercase bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                                  <span className="material-symbols-outlined text-xs">bolt</span>
+                                  ANYTIME
+                                </span>
+                              )}
+                              {quiz.status === "SCHEDULED" && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-label-code px-2.5 py-0.5 rounded font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                  <span className="material-symbols-outlined text-xs">schedule</span>
+                                  SCHEDULED
+                                </span>
+                              )}
+                              {quiz.status === "LIVE" && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-label-code px-2.5 py-0.5 rounded font-bold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse inline-block" />
+                                  <span className="material-symbols-outlined text-xs">sensors</span>
+                                  LIVE
+                                </span>
+                              )}
+                              {quiz.status === "ENDED" && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-label-code px-2.5 py-0.5 rounded font-bold uppercase bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                  <span className="material-symbols-outlined text-xs">flag</span>
+                                  ENDED
+                                </span>
+                              )}
+                              {quiz.pin && (
+                                <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-surface-container border border-outline-variant/30 text-on-surface-variant">
+                                  PIN: <strong className="text-tertiary">{quiz.pin}</strong>
+                                </span>
+                              )}
                               <span className="text-[11px] font-label-code text-on-surface-variant">
                                 {quiz.topic}
                               </span>
@@ -1990,6 +2056,19 @@ function ProfileContent() {
 
                           {/* Action Buttons */}
                           <div className="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-outline-variant/20 font-headline-sm text-xs">
+                            {(quiz.status === "ANYTIME" || quiz.status === "LIVE") && (
+                              <Link
+                                href={quiz.pin ? `/join?pin=${quiz.pin}` : `/quiz?quizId=${quiz.id}`}
+                                className="px-3 py-1.5 rounded-xl bg-primary-container hover:bg-primary-container/90 border border-white/10 text-white flex items-center gap-1 shadow-sm transition-all"
+                                title="Play Assessment"
+                              >
+                                <span className="material-symbols-outlined text-sm">
+                                  play_arrow
+                                </span>
+                                <span>Play</span>
+                              </Link>
+                            )}
+
                             <Link
                               href={`/quiz/review/${quiz.id}`}
                               className="px-3 py-1.5 rounded-xl bg-surface-container hover:bg-surface-bright border border-outline-variant/30 text-on-surface hover:text-white flex items-center gap-1 transition-all"
@@ -2013,18 +2092,40 @@ function ProfileContent() {
 
                             <Link
                               href={`/deploy?quizId=${quiz.id}`}
-                              className="px-3 py-1.5 rounded-xl bg-primary-container hover:bg-primary-container/90 border border-white/10 text-white flex items-center gap-1 shadow-sm transition-all"
+                              className={`px-3 py-1.5 rounded-xl border transition-all flex items-center gap-1 shadow-sm ${
+                                quiz.status === "DRAFT"
+                                  ? "bg-primary-container hover:bg-primary-container/90 border-white/10 text-white font-semibold"
+                                  : "bg-surface-container hover:bg-surface-bright border-outline-variant/30 text-on-surface hover:text-white"
+                              }`}
                             >
                               <span className="material-symbols-outlined text-sm">
                                 rocket_launch
                               </span>
-                              <span>Deploy</span>
+                              <span>{quiz.status === "DRAFT" ? "Deploy" : "Portal"}</span>
                             </Link>
+
+                            <button
+                              type="button"
+                              onClick={() => setCopyTargetQuiz({ quizId: quiz.id, title: quiz.title })}
+                              className="px-3 py-1.5 rounded-xl bg-surface-container hover:bg-surface-bright border border-outline-variant/30 text-on-surface hover:text-white flex items-center gap-1 transition-all cursor-pointer"
+                              title="Create a Copy in Different Workspace"
+                            >
+                              <span className="material-symbols-outlined text-sm">content_copy</span>
+                              <span>Copy</span>
+                            </button>
                           </div>
                         </div>
                       ))}
                     </div>
                   )}
+
+                  {/* Copy Quiz Modal */}
+                  <CopyQuizModal
+                    isOpen={!!copyTargetQuiz}
+                    quiz={copyTargetQuiz}
+                    onClose={() => setCopyTargetQuiz(null)}
+                    onSuccess={() => loadCreatedQuizzes()}
+                  />
                 </div>
               </ParallaxReveal>
             )}

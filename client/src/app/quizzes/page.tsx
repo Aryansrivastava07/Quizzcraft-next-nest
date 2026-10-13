@@ -9,6 +9,7 @@ import AuthFooter from "@/components/layout/AuthFooter";
 import ParallaxReveal from "@/components/ui/ParallaxReveal";
 import { quizService } from "@/lib/api/quiz-service";
 import { PublicQuizItem } from "@/lib/api/types";
+import CopyQuizModal from "@/components/quiz/CopyQuizModal";
 
 type StatusFilter = "ALL" | "LIVE" | "ANYTIME" | "SCHEDULED" | "ENDED";
 
@@ -18,6 +19,7 @@ export default function PublicQuizzesPage() {
   const [quizzes, setQuizzes] = useState<PublicQuizItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copyTargetQuiz, setCopyTargetQuiz] = useState<{ quizId: string; title: string } | null>(null);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -68,7 +70,7 @@ export default function PublicQuizzesPage() {
 
   // Filtered Quizzes (Strictly deployed and not in draft)
   const deployedQuizzes = useMemo(() => {
-    return quizzes.filter((q) => q.isDeployed !== false && q.status !== "DRAFT");
+    return quizzes.filter((q) => q.status !== "DRAFT" && (q.isDeployed || q.status === "ANYTIME" || q.status === "LIVE" || q.status === "SCHEDULED"));
   }, [quizzes]);
 
   const filteredQuizzes = useMemo(() => {
@@ -353,9 +355,17 @@ export default function PublicQuizzesPage() {
                             {quiz.status}
                           </span>
 
-                          <span className="px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-white font-mono text-[10px] font-semibold">
-                            {quiz.questionsCount} Qs
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {quiz.antiCheat && (
+                              <span className="px-2 py-0.5 rounded-full bg-purple-950/80 backdrop-blur-md border border-purple-500/50 text-purple-200 font-label-code text-[10px] font-bold flex items-center gap-1 shadow-sm">
+                                <span className="material-symbols-outlined text-xs text-purple-400">shield</span>
+                                Proctored
+                              </span>
+                            )}
+                            <span className="px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-md border border-white/15 text-white font-mono text-[10px] font-semibold">
+                              {quiz.questionsCount} Qs
+                            </span>
+                          </div>
                         </div>
                       </div>
 
@@ -363,6 +373,14 @@ export default function PublicQuizzesPage() {
                       <h3 className="text-base font-headline-sm font-bold text-white group-hover:text-tertiary transition-colors mb-2 line-clamp-2 leading-snug">
                         {quiz.title}
                       </h3>
+
+                      {/* Integrity indicator if anti-cheat enabled */}
+                      {quiz.antiCheat && (
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-500/15 border border-purple-500/30 text-[10px] text-purple-300 font-mono mb-2.5">
+                          <span className="material-symbols-outlined text-xs text-purple-400">verified_user</span>
+                          <span>Anti-Cheat Guard Active</span>
+                        </div>
+                      )}
 
                       {/* Room PIN Tag */}
                       {quiz.pin && (
@@ -452,14 +470,24 @@ export default function PublicQuizzesPage() {
                         </Link>
                       )}
 
-                      {/* Secondary Review & Leaderboard Button */}
-                      <Link
-                        href={`/quiz/review/${quiz.quizId}`}
-                        className="w-full py-2 rounded-xl bg-surface-container hover:bg-surface-bright border border-outline-variant/40 text-on-surface hover:text-white font-headline-sm text-center text-xs font-medium transition-all flex items-center justify-center gap-1.5"
-                      >
-                        <span className="material-symbols-outlined text-sm text-tertiary">leaderboard</span>
-                        View Leaderboard & Stats
-                      </Link>
+                      {/* Secondary Actions: Leaderboard & Copy Quiz */}
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/quiz/review/${quiz.quizId}`}
+                          className="flex-1 py-2 rounded-xl bg-surface-container hover:bg-surface-bright border border-outline-variant/40 text-on-surface hover:text-white font-headline-sm text-center text-xs font-medium transition-all flex items-center justify-center gap-1.5"
+                        >
+                          <span className="material-symbols-outlined text-sm text-tertiary">leaderboard</span>
+                          <span>Leaderboard &amp; Stats</span>
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => setCopyTargetQuiz({ quizId: quiz.quizId, title: quiz.title })}
+                          className="p-2 rounded-xl bg-surface-container hover:bg-surface-bright border border-outline-variant/40 text-on-surface hover:text-white transition-all cursor-pointer flex items-center justify-center shrink-0"
+                          title="Create a Copy in your Workspace"
+                        >
+                          <span className="material-symbols-outlined text-sm">content_copy</span>
+                        </button>
+                      </div>
                     </div>
 
                   </div>
@@ -469,6 +497,13 @@ export default function PublicQuizzesPage() {
           </div>
         )}
 
+        {/* Copy Quiz Modal */}
+        <CopyQuizModal
+          isOpen={!!copyTargetQuiz}
+          quiz={copyTargetQuiz}
+          onClose={() => setCopyTargetQuiz(null)}
+          onSuccess={() => fetchQuizzes()}
+        />
       </main>
 
       {/* Footer */}

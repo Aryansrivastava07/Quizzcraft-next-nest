@@ -216,6 +216,8 @@ function OrgCreateQuizContent({
         difficulty,
         quizType,
         sourceUrl: realUrl || undefined,
+        orgId: organization.orgId,
+        isPractice: !isOrgAdmin,
         images: realImages.length > 0 ? realImages : undefined,
         videos: realVideos.length > 0 ? realVideos : undefined,
         pdfs: realPdfs.length > 0 ? realPdfs : undefined,
@@ -554,10 +556,10 @@ function OrgCreateQuizContent({
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link
-                href={`/deploy?quizId=${createdQuizPayload.quizId}`}
+                href={`/deploy?quizId=${createdQuizPayload.quizId}&orgSlug=${orgSlug}`}
                 className="w-full py-2.5 px-4 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white text-xs font-semibold transition-all shadow-md shadow-primary-container/25 border border-white/10 active:scale-95"
               >
-                Deploy &amp; Schedule Mission
+                {!isOrgAdmin ? "Open Training & Peer Hub" : "Deploy & Schedule Mission"}
               </Link>
               <Link
                 href={`/${orgSlug}/quizzes`}

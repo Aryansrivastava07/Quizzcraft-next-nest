@@ -58,6 +58,22 @@ export const authService = {
   },
 
   /**
+   * Login or signup using Google ID token or One-Tap credential
+   */
+  async loginWithGoogle(data: {
+    credential?: string;
+    idToken?: string;
+    orgId?: string;
+    orgSlug?: string;
+    groupCode?: string;
+  }) {
+    return apiClient<{ user: UserMe }>(API_ROUTES.auth.google, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
    * Logout user session and clear cookies
    * Backend reads refreshToken directly from cookies and clears tokens
    */

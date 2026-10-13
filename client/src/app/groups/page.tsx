@@ -1,16 +1,19 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
+import CosmicCanvas from "@/components/canvas/CosmicCanvas";
 import { groupService } from "@/lib/api/group-service";
 import { useAuth } from "@/lib/auth/auth-context";
 import { Group } from "@/lib/api/types";
 import { formatApiError } from "@/lib/api/client";
 
-export default function GroupsHubPage() {
+function GroupsHubContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlCode = searchParams.get("code") || "";
   const { user, isLoading: authLoading } = useAuth();
 
   const [activeTab, setActiveTab] = useState<"explore" | "my">("explore");
@@ -33,6 +36,12 @@ export default function GroupsHubPage() {
 
   // Joining direct state
   const [joiningGroupId, setJoiningGroupId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (urlCode) {
+      setJoinCode(urlCode.toUpperCase().trim());
+    }
+  }, [urlCode]);
 
   useEffect(() => {
     if (!authLoading) {
@@ -147,10 +156,17 @@ export default function GroupsHubPage() {
   );
 
   return (
-    <div className="min-h-screen bg-surface text-on-surface flex flex-col selection:bg-primary selection:text-white">
+    <div className="min-h-screen relative overflow-hidden bg-surface text-on-surface flex flex-col selection:bg-primary selection:text-white">
+      {/* Subtle Cosmic Starfield Canvas */}
+      <CosmicCanvas />
+
+      {/* Subtle Ambient Nebula Glows */}
+      <div className="fixed top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[520px] bg-primary/10 rounded-full blur-[140px] pointer-events-none -z-10" />
+      <div className="fixed bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-[460px] h-[460px] bg-tertiary/10 rounded-full blur-[140px] pointer-events-none -z-10" />
+
       <Navbar />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 pt-24 pb-16">
+      <main className="relative z-10 flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 pt-24 pb-16">
         {/* Hero Section */}
         <div className="rounded-3xl bg-[#0b0e1b]/90 border border-white/10 p-6 sm:p-8 backdrop-blur-xl shadow-2xl relative overflow-hidden mb-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
@@ -182,20 +198,38 @@ export default function GroupsHubPage() {
             </div>
           </div>
 
+          {/* Direct Invite Code Notice */}
+          {urlCode && (
+            <div className="mt-6 p-3.5 rounded-2xl bg-tertiary/15 border border-tertiary/30 text-xs text-tertiary flex items-center justify-between animate-fadeIn">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-base">vpn_key</span>
+                <span>
+                  Cohort admission code <strong className="font-mono text-white bg-black/40 px-2 py-0.5 rounded border border-tertiary/30">{urlCode.toUpperCase()}</strong> detected from invite link! Click <strong>Join</strong> below to enter.
+                </span>
+              </div>
+              <button
+                onClick={() => setJoinCode(urlCode.toUpperCase().trim())}
+                className="px-2.5 py-1 rounded-lg bg-tertiary text-black font-bold text-[11px] hover:bg-tertiary/90 transition-all cursor-pointer"
+              >
+                Auto-filled
+              </button>
+            </div>
+          )}
+
           {/* Quick Join By Code Bar */}
           <div className="mt-6 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="text-xs text-on-surface-variant flex items-center gap-1.5">
               <span className="material-symbols-outlined text-sm text-tertiary">key</span>
-              <span>Have a 6-character cohort admission code?</span>
+              <span>Have a cohort admission code?</span>
             </div>
             <form onSubmit={handleJoinViaCode} className="flex items-center gap-2 w-full sm:w-auto">
               <input
                 type="text"
                 required
-                maxLength={8}
+                maxLength={10}
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                placeholder="QC-XXXX"
+                placeholder="e.g. QC-SURD"
                 className="px-3.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-center font-mono tracking-wider text-xs text-white font-bold outline-none focus:border-tertiary transition-colors uppercase w-32"
               />
               <button
@@ -301,11 +335,13 @@ export default function GroupsHubPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredGroups.map((g) => {
+            {filteredGroups.map((g, index) => {
               const isEnrolled =
                 g.isMember ||
+                g.isCreator ||
                 (user && g.memberIds?.includes(user.userId)) ||
-                (user && g.creatorId === user.userId);
+                (user && g.creatorId === user.userId) ||
+                (user && g.creator?.username && user.username?.toLowerCase() === g.creator.username.toLowerCase());
 
               return (
                 <div
@@ -456,5 +492,26 @@ export default function GroupsHubPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function GroupsHubPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#070913] text-on-surface flex items-center justify-center">
+          <div className="flex flex-col items-center gap-3">
+            <span className="material-symbols-outlined text-3xl text-primary animate-spin">
+              progress_activity
+            </span>
+            <p className="text-xs font-mono text-on-surface-variant animate-pulse">
+              Accessing Cohorts Hub...
+            </p>
+          </div>
+        </div>
+      }
+    >
+      <GroupsHubContent />
+    </Suspense>
   );
 }

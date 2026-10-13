@@ -1,9 +1,43 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  Copy,
+  Check,
+  Share2,
+  ClipboardList,
+  MessageSquare,
+  FileText,
+  Users,
+  Search,
+  Pin,
+  Send,
+  Paperclip,
+  Smile,
+  MoreVertical,
+  Clock,
+  Trophy,
+  Target,
+  Calendar,
+  Play,
+  Trash2,
+  CheckCircle2,
+  AlertCircle,
+  Sparkles,
+  X,
+  HelpCircle,
+  Award,
+  TrendingUp,
+  BarChart3,
+  Flame,
+  UserCheck,
+} from "lucide-react";
+
 import Navbar from "@/components/layout/Navbar";
+import CosmicCanvas from "@/components/canvas/CosmicCanvas";
 import { groupService } from "@/lib/api/group-service";
 import { quizService } from "@/lib/api/quiz-service";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -11,14 +45,15 @@ import { useCohortSocket } from "@/lib/hooks/useCohortSocket";
 import {
   Group,
   GroupMessage,
-  GroupGradebookResponse,
   Quiz,
   OrgMember,
   GroupQuestionContext,
+  CohortQuizResultsResponse,
 } from "@/lib/api/types";
 import { formatApiError } from "@/lib/api/client";
 
-type GroupTab = "discussion" | "quizzes" | "gradebook" | "members" | "settings";
+// Only "discussion" and "quizzes" tabs as requested ("dont include cohort gradebook, cohort settings")
+type CohortTab = "discussion" | "quizzes";
 
 export default function GroupWorkspacePage() {
   const params = useParams();
@@ -26,14 +61,15 @@ export default function GroupWorkspacePage() {
   const groupId = params.groupId as string;
   const { user, isLoading: authLoading } = useAuth();
 
+  // Core cohort state
   const [group, setGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<OrgMember[]>([]);
   const [pendingMembers, setPendingMembers] = useState<OrgMember[]>([]);
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [messages, setMessages] = useState<GroupMessage[]>([]);
-  const [gradebook, setGradebook] = useState<GroupGradebookResponse | null>(null);
 
-  const [activeTab, setActiveTab] = useState<GroupTab>("discussion");
+  // Navigation
+  const [activeTab, setActiveTab] = useState<CohortTab>("discussion");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -41,38 +77,72 @@ export default function GroupWorkspacePage() {
   // Discussion state
   const [messageText, setMessageText] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showPinnedOnly, setShowPinnedOnly] = useState(false);
   const [questionContext, setQuestionContext] = useState<GroupQuestionContext | null>(null);
   const [showQuestionSelector, setShowQuestionSelector] = useState(false);
-  const [showPinnedDropdown, setShowPinnedDropdown] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const activeTabRef = useRef<CohortTab>("discussion");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Assign Quiz Modal state
-  const [showAssignQuizModal, setShowAssignQuizModal] = useState(false);
+  // Copy buttons
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+
+  // Assign Quiz Modal & Arena Scheduling state
+  const [showAssignModal, setShowAssignModal] = useState(false);
   const [myAvailableQuizzes, setMyAvailableQuizzes] = useState<Quiz[]>([]);
   const [selectedQuizId, setSelectedQuizId] = useState("");
-  const [quizDueDate, setQuizDueDate] = useState("");
+  const [isArenaMode, setIsArenaMode] = useState(true);
+  const [scheduledStartTime, setScheduledStartTime] = useState("");
+  const [arenaDurationMinutes, setArenaDurationMinutes] = useState(60);
+  const [assignmentDueDate, setAssignmentDueDate] = useState("");
   const [assigningQuiz, setAssigningQuiz] = useState(false);
 
-  // Group settings state
-  const [isLocked, setIsLocked] = useState(false);
-  const [requireApproval, setRequireApproval] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
+  // Cohort Results & Leaderboard Modal state ("results are shown to everyone")
+  const [showResultsModal, setShowResultsModal] = useState(false);
+  const [activeResultsQuizId, setActiveResultsQuizId] = useState<string | null>(null);
+  const [resultsData, setResultsData] = useState<CohortQuizResultsResponse | null>(null);
+  const [loadingResults, setLoadingResults] = useState(false);
 
-  // Mobile sidebar toggle
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  // Server-computed membership status
+  const [serverIsMember, setServerIsMember] = useState(false);
+  const [serverIsCreator, setServerIsCreator] = useState(false);
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+    if (activeTab === "discussion") {
+      setUnreadCount(0);
+    }
+  }, [activeTab]);
+
+  const isCreator =
+    serverIsCreator ||
+    Boolean(user?.userId && group?.creatorId && user.userId === group.creatorId) ||
+    Boolean(
+      user?.username &&
+        group?.creator?.username &&
+        user.username.toLowerCase() === group.creator.username.toLowerCase()
+    );
+
+  const isMember =
+    serverIsMember ||
+    isCreator ||
+    Boolean(user?.userId && group?.memberIds?.includes(user.userId)) ||
+    Boolean(user?.userId && members.some((m) => m.userId === user.userId)) ||
+    Boolean(
+      user?.username &&
+        members.some((m) => m.username?.toLowerCase() === user.username.toLowerCase())
+    );
 
   const isCreatorOrAdmin =
-    user?.userId === group?.creatorId ||
+    isCreator ||
     user?.role === "ORG_ADMIN" ||
     user?.role === "SUPER_ADMIN" ||
     Boolean(user?.isSuperAdmin);
 
-  const isMember =
-    Boolean(user && group?.memberIds?.includes(user.userId)) ||
-    Boolean(user && user.userId === group?.creatorId);
-
-  // ==================== REAL-TIME WEBSOCKET INTEGRATION ====================
+  // Real-time WebSocket integration
   const { isConnected, activeCadetsCount, typingUsers, sendTyping } = useCohortSocket({
     groupId,
     userId: user?.userId,
@@ -82,6 +152,9 @@ export default function GroupWorkspacePage() {
         if (prev.some((m) => m.messageId === newMsg.messageId)) return prev;
         return [...prev, newMsg];
       });
+      if (activeTabRef.current !== "discussion") {
+        setUnreadCount((prev) => prev + 1);
+      }
     },
     onMessagePinned: (messageId, isPinned) => {
       setMessages((prev) =>
@@ -91,31 +164,22 @@ export default function GroupWorkspacePage() {
     onMessageDeleted: (messageId) => {
       setMessages((prev) => prev.filter((m) => m.messageId !== messageId));
     },
+    onQuizAssigned: (assignedQuiz) => {
+      setQuizzes((prev) => {
+        if (prev.some((q) => q.quizId === assignedQuiz.quizId)) return prev;
+        return [assignedQuiz, ...prev];
+      });
+      setSuccess(`New quiz mission assigned: ${assignedQuiz.title}`);
+    },
   });
 
   useEffect(() => {
-    if (!authLoading && user && groupId) {
-      loadGroupWorkspace();
+    if (!authLoading && user?.userId && groupId) {
+      loadCohortData();
     }
-  }, [authLoading, user, groupId]);
+  }, [authLoading, user?.userId, groupId]);
 
-  // Fallback Polling every 12s only if WebSocket is disconnected
-  useEffect(() => {
-    if (activeTab !== "discussion" || !groupId || isConnected) return;
-    const interval = setInterval(async () => {
-      try {
-        const res = await groupService.getGroupMessages(groupId);
-        if (res?.data?.messages) {
-          setMessages(res.data.messages);
-        }
-      } catch (err) {
-        // Silent poll error
-      }
-    }, 12000);
-    return () => clearInterval(interval);
-  }, [activeTab, groupId, isConnected]);
-
-  const loadGroupWorkspace = async () => {
+  const loadCohortData = async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -124,6 +188,11 @@ export default function GroupWorkspacePage() {
         groupService.getGroupQuizzes(groupId),
         groupService.getGroupMessages(groupId),
       ]);
+
+      if (groupRes?.data) {
+        if (groupRes.data.isMember !== undefined) setServerIsMember(Boolean(groupRes.data.isMember));
+        if (groupRes.data.isCreator !== undefined) setServerIsCreator(Boolean(groupRes.data.isCreator));
+      }
 
       if (groupRes?.data?.group) {
         const fetchedGroup = groupRes.data.group;
@@ -140,22 +209,13 @@ export default function GroupWorkspacePage() {
         setGroup(fetchedGroup);
         setMembers(groupRes.data.members || []);
         setPendingMembers(groupRes.data.pendingMembers || []);
-        setIsLocked(fetchedGroup.isLocked);
-        setRequireApproval(fetchedGroup.requireApproval);
       }
+
       if (quizzesRes?.data?.quizzes) {
         setQuizzes(quizzesRes.data.quizzes);
       }
       if (messagesRes?.data?.messages) {
         setMessages(messagesRes.data.messages);
-      }
-
-      // Load gradebook
-      try {
-        const gbRes = await groupService.getGroupGradebook(groupId);
-        if (gbRes?.data) setGradebook(gbRes.data);
-      } catch (e) {
-        // Non-creators might not have gradebook access
       }
     } catch (err: any) {
       setError(formatApiError(err));
@@ -164,7 +224,7 @@ export default function GroupWorkspacePage() {
     }
   };
 
-  // Scroll to bottom of messages
+  // Scroll to bottom on new message
   useEffect(() => {
     if (activeTab === "discussion") {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -221,7 +281,7 @@ export default function GroupWorkspacePage() {
   };
 
   const handleDeleteMessage = async (messageId: string) => {
-    if (!confirm("Are you sure you want to delete this message?")) return;
+    if (!confirm("Are you sure you want to delete this transmission?")) return;
     try {
       await groupService.deleteGroupMessage(groupId, messageId);
       setMessages((prev) => prev.filter((m) => m.messageId !== messageId));
@@ -233,7 +293,7 @@ export default function GroupWorkspacePage() {
   const handleApproveMember = async (targetUserId: string) => {
     try {
       await groupService.approvePendingMember(groupId, targetUserId);
-      setSuccess("Member admitted into the cohort!");
+      setSuccess("Cadet admitted into cohort roster!");
       const approved = pendingMembers.find((p) => p.userId === targetUserId);
       setPendingMembers((prev) => prev.filter((p) => p.userId !== targetUserId));
       if (approved) {
@@ -244,124 +304,6 @@ export default function GroupWorkspacePage() {
     }
   };
 
-  const handleRegenerateCode = async () => {
-    if (!confirm("Regenerate cohort code? The old code will expire immediately.")) return;
-    try {
-      const res = await groupService.regenerateGroupCode(groupId);
-      if (res?.data?.code && group) {
-        setGroup({ ...group, code: res.data.code });
-        setSuccess(`New cohort code generated: ${res.data.code}`);
-      }
-    } catch (err: any) {
-      setError(formatApiError(err));
-    }
-  };
-
-  const handleSaveSecuritySettings = async () => {
-    try {
-      const res = await groupService.updateSettings(groupId, {
-        isLocked,
-        requireApproval,
-      });
-      if (res?.data) {
-        setGroup(res.data);
-        setSuccess("Cohort security preferences updated.");
-      }
-    } catch (err: any) {
-      setError(formatApiError(err));
-    }
-  };
-
-  const handleJoinCohortDirectly = async () => {
-    try {
-      await groupService.joinGroupById(groupId);
-      setSuccess("You have joined this cohort!");
-      await loadGroupWorkspace();
-    } catch (err: any) {
-      setError(formatApiError(err));
-    }
-  };
-
-  const handleOpenAssignModal = async () => {
-    setShowAssignQuizModal(true);
-    try {
-      const res = await quizService.getUserQuizzes();
-      if (res?.data?.quizzes) {
-        setMyAvailableQuizzes(res.data.quizzes);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleAssignQuiz = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedQuizId) return;
-    setAssigningQuiz(true);
-    try {
-      await quizService.deployQuiz(selectedQuizId, {
-        accessMode: "ORGANIZATION",
-        groupId,
-        dueDate: quizDueDate || undefined,
-      });
-      setSuccess("Quiz successfully assigned to cohort!");
-      setShowAssignQuizModal(false);
-      setSelectedQuizId("");
-      setQuizDueDate("");
-      const qRes = await groupService.getGroupQuizzes(groupId);
-      if (qRes?.data?.quizzes) setQuizzes(qRes.data.quizzes);
-    } catch (err: any) {
-      setError(formatApiError(err));
-    } finally {
-      setAssigningQuiz(false);
-    }
-  };
-
-  const handleExportGradebookCSV = () => {
-    if (!gradebook || !gradebook.students.length) return;
-    const header = [
-      "User ID",
-      "Full Name",
-      "Username",
-      "Email",
-      ...gradebook.quizzes.map((q) => `"${q.title} Score (%)"`),
-      "Average Score (%)",
-      "Total Completed",
-    ];
-
-    const rows = gradebook.students.map((st) => [
-      st.userId,
-      `"${st.fullName || st.username}"`,
-      st.username,
-      st.email,
-      ...gradebook.quizzes.map((q) => {
-        const sc = st.scores[q.quizId];
-        return sc ? sc.percentage : "N/A";
-      }),
-      st.averageScore,
-      st.totalCompleted,
-    ]);
-
-    const csvContent = [header.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `gradebook_${group?.name.replace(/\s+/g, "_")}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleCopyInviteLink = () => {
-    if (typeof window === "undefined" || !group) return;
-    const origin = window.location.origin;
-    const link = `${origin}/auth?code=${group.code}`;
-    navigator.clipboard.writeText(link);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
-  };
-
   const handleCopyCode = () => {
     if (!group) return;
     navigator.clipboard.writeText(group.code);
@@ -369,40 +311,211 @@ export default function GroupWorkspacePage() {
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
-  const getDueDateStatus = (dueDateStr?: string) => {
-    if (!dueDateStr) return { label: "NO DEADLINE", style: "text-on-surface-variant bg-white/[0.04]" };
-    const due = new Date(dueDateStr).getTime();
-    const now = Date.now();
-    const diffHours = (due - now) / (1000 * 60 * 60);
+  const handleCopyLink = () => {
+    if (typeof window === "undefined" || !group) return;
+    const origin = window.location.origin;
+    const link = `${origin}/groups?code=${group.code}`;
+    navigator.clipboard.writeText(link);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
 
-    if (diffHours < 0) {
+  // Open Assign Quiz Modal and fetch instructor's quizzes
+  const handleOpenAssignModal = async () => {
+    setShowAssignModal(true);
+    // Set default scheduled start time to current local time formatted for datetime-local
+    const now = new Date();
+    const localIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16);
+    setScheduledStartTime(localIso);
+
+    try {
+      const res = await quizService.getUserQuizzes();
+      if (res?.data?.quizzes) {
+        setMyAvailableQuizzes(res.data.quizzes);
+        if (res.data.quizzes.length > 0 && !selectedQuizId) {
+          setSelectedQuizId(res.data.quizzes[0].quizId);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Submit Quiz Assignment (with Arena option)
+  const handleAssignQuiz = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedQuizId) return;
+    setAssigningQuiz(true);
+    try {
+      await groupService.assignQuiz(groupId, {
+        quizId: selectedQuizId,
+        isArena: isArenaMode,
+        scheduledFor: isArenaMode && scheduledStartTime ? new Date(scheduledStartTime).toISOString() : undefined,
+        durationMinutes: isArenaMode ? Number(arenaDurationMinutes) || 60 : undefined,
+        dueDate: !isArenaMode && assignmentDueDate ? new Date(assignmentDueDate).toISOString() : undefined,
+      });
+
+      setSuccess(
+        isArenaMode
+          ? "Group Arena scheduled successfully! All cohort members can compete and review live results."
+          : "Quiz successfully assigned to cohort missions!"
+      );
+      setShowAssignModal(false);
+
+      // Refresh cohort quizzes list
+      const qRes = await groupService.getGroupQuizzes(groupId);
+      if (qRes?.data?.quizzes) {
+        setQuizzes(qRes.data.quizzes);
+      }
+    } catch (err: any) {
+      setError(formatApiError(err));
+    } finally {
+      setAssigningQuiz(false);
+    }
+  };
+
+  // Remove / Unassign quiz from cohort
+  const handleUnassignQuiz = async (quizId: string) => {
+    if (!confirm("Are you sure you want to remove this quiz from the cohort?")) return;
+    try {
+      await groupService.unassignQuiz(groupId, quizId);
+      setQuizzes((prev) => prev.filter((q) => q.quizId !== quizId));
+      setSuccess("Quiz removed from cohort.");
+    } catch (err: any) {
+      setError(formatApiError(err));
+    }
+  };
+
+  // Open Cohort Results & Leaderboard Modal ("results are shown to everyone")
+  const handleOpenResults = async (quizId: string) => {
+    setActiveResultsQuizId(quizId);
+    setShowResultsModal(true);
+    setLoadingResults(true);
+    try {
+      const res = await groupService.getQuizResults(groupId, quizId);
+      if (res?.data) {
+        setResultsData(res.data);
+      }
+    } catch (err: any) {
+      setError(formatApiError(err));
+    } finally {
+      setLoadingResults(false);
+    }
+  };
+
+  // Helper for initials
+  const getInitials = (name?: string) => {
+    if (!name) return "CD";
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
+
+  // Helper for message time
+  const formatTime = (isoString?: string) => {
+    if (!isoString) return "";
+    try {
+      const d = new Date(isoString);
+      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    } catch {
+      return "";
+    }
+  };
+
+  // Helper for Arena status calculation
+  const getArenaStatus = (q: Quiz) => {
+    const now = Date.now();
+    if (q.deploymentType === "SCHEDULED" || q.status === "SCHEDULED") {
+      if (q.scheduledFor) {
+        const start = new Date(q.scheduledFor).getTime();
+        const end = q.liveUntil ? new Date(q.liveUntil).getTime() : start + (q.liveDurationMinutes || 60) * 60000;
+        if (now < start) {
+          return {
+            badge: "ARENA SCHEDULED",
+            color: "text-amber-400 bg-amber-500/10 border-amber-500/30",
+            active: false,
+            desc: `Starts ${new Date(start).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}`,
+          };
+        } else if (now <= end) {
+          return {
+            badge: "ARENA LIVE NOW",
+            color: "text-emerald-400 bg-emerald-500/15 border-emerald-500/40 animate-pulse",
+            active: true,
+            desc: `Live until ${new Date(end).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
+          };
+        } else {
+          return {
+            badge: "ARENA CONCLUDED",
+            color: "text-slate-400 bg-slate-800 border-slate-700",
+            active: false,
+            desc: "Arena window has closed",
+          };
+        }
+      }
+    }
+
+    if (q.status === "LIVE") {
       return {
-        label: "PAST DUE",
-        style: "text-red-400 bg-red-500/10 border-red-500/30",
-        isPastDue: true,
+        badge: "ARENA LIVE NOW",
+        color: "text-emerald-400 bg-emerald-500/15 border-emerald-500/40 animate-pulse",
+        active: true,
+        desc: q.liveUntil ? `Live until ${new Date(q.liveUntil).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Active now",
       };
     }
-    if (diffHours <= 24) {
+
+    if (q.dueDate) {
+      const due = new Date(q.dueDate).getTime();
+      if (now > due) {
+        return {
+          badge: "PAST DUE",
+          color: "text-rose-400 bg-rose-500/10 border-rose-500/30",
+          active: false,
+          desc: `Due date passed`,
+        };
+      }
       return {
-        label: `DUE IN ${Math.max(1, Math.round(diffHours))}H`,
-        style: "text-amber-400 bg-amber-500/10 border-amber-500/30 animate-pulse",
+        badge: "OPEN MISSION",
+        color: "text-indigo-400 bg-indigo-500/10 border-indigo-500/30",
+        active: true,
+        desc: `Due ${new Date(due).toLocaleDateString()}`,
       };
     }
+
     return {
-      label: `DUE ${new Date(dueDateStr).toLocaleDateString()}`,
-      style: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30",
+      badge: "ANYTIME MISSION",
+      color: "text-violet-400 bg-violet-500/10 border-violet-500/30",
+      active: true,
+      desc: "Open for cohort cadets",
     };
   };
 
+  // Filter messages by search query and pinned status
+  const filteredMessages = useMemo(() => {
+    return messages.filter((m) => {
+      if (showPinnedOnly && !m.isPinned) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const contentMatch = m.content.toLowerCase().includes(q);
+        const authorMatch = (m.authorName || m.senderName || "").toLowerCase().includes(q);
+        return contentMatch || authorMatch;
+      }
+      return true;
+    });
+  }, [messages, showPinnedOnly, searchQuery]);
+
+  const pinnedCount = useMemo(() => messages.filter((m) => m.isPinned).length, [messages]);
+
   if (authLoading || isLoading) {
     return (
-      <div className="min-h-screen bg-surface text-on-surface flex items-center justify-center">
+      <div className="min-h-screen bg-[#070913] text-white flex flex-col items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <span className="material-symbols-outlined text-4xl text-primary animate-spin">
-            progress_activity
-          </span>
-          <p className="text-xs font-mono text-on-surface-variant animate-pulse">
-            Connecting to Cohort Neural Network...
+          <div className="w-10 h-10 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs font-mono text-slate-400 animate-pulse">
+            Establishing Cohort Neural Uplink...
           </p>
         </div>
       </div>
@@ -411,1098 +524,1290 @@ export default function GroupWorkspacePage() {
 
   if (!group) {
     return (
-      <div className="min-h-screen bg-surface text-on-surface flex flex-col">
+      <div className="min-h-screen bg-[#070913] text-white flex flex-col">
         <Navbar />
-        <main className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-          <h1 className="text-xl font-bold text-white">Cohort Not Found or Access Denied</h1>
-          <p className="text-xs text-on-surface-variant mt-2">
-            You might not be enrolled in this cohort workspace.
+        <main className="flex-1 flex flex-col items-center justify-center p-6 pt-28 text-center">
+          <AlertCircle className="w-12 h-12 text-rose-400 mb-3" />
+          <h1 className="text-xl font-bold">Cohort Workspace Unavailable</h1>
+          <p className="text-xs text-slate-400 mt-2 max-w-md">
+            This cohort does not exist or you are not authorized to access this private terminal.
           </p>
           <Link
             href="/groups"
-            className="mt-4 px-4 py-2 rounded-xl bg-primary-container text-white text-xs font-semibold"
+            className="mt-5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition"
           >
-            Back to Cohorts Hub
+            Return to Cohorts Hub
           </Link>
         </main>
       </div>
     );
   }
 
-  const pinnedMessages = messages.filter((m) => m.isPinned);
-  const unpinnedMessages = messages.filter((m) => !m.isPinned);
-
   return (
-    <div className="min-h-screen bg-[#070913] text-on-surface flex flex-col selection:bg-primary selection:text-white">
-      <Navbar />
+    <div className="min-h-screen lg:h-screen lg:overflow-hidden relative bg-[#070913] text-white flex flex-col selection:bg-violet-500 selection:text-white">
+      {/* Universal Cosmic Starfield Canvas */}
+      <CosmicCanvas />
 
-      {/* Main Workspace Frame */}
-      <div className="flex-1 w-full max-w-[1720px] mx-auto px-2 sm:px-4 pt-20 pb-3 flex flex-col lg:flex-row gap-3 h-[calc(100vh-0.5rem)] min-h-[640px] overflow-hidden">
-        {/* ==================== LEFT SIDEBAR ==================== */}
-        <aside
-          className={`lg:w-72 xl:w-80 shrink-0 bg-[#0a0e1f]/95 backdrop-blur-2xl border border-white/10 rounded-2xl flex flex-col justify-between overflow-hidden shadow-2xl transition-all duration-300 z-20 ${
-            mobileSidebarOpen ? "fixed inset-x-2 top-20 bottom-4 z-40 lg:static" : "hidden lg:flex"
-          }`}
-        >
-          {/* Sidebar Top / Cohort Header */}
-          <div className="p-4 border-b border-white/10 bg-white/[0.02]">
-            <div className="flex items-center justify-between mb-3">
-              <Link
-                href="/groups"
-                className="text-xs text-on-surface-variant hover:text-white flex items-center gap-1.5 transition-colors font-medium group"
-              >
-                <span className="material-symbols-outlined text-sm group-hover:-translate-x-0.5 transition-transform">
-                  arrow_back
-                </span>
-                <span>Cohorts Hub</span>
-              </Link>
+      {/* Global Navigation Header */}
+      <Navbar activeChapter="cohorts" />
 
-              {mobileSidebarOpen && (
-                <button
-                  onClick={() => setMobileSidebarOpen(false)}
-                  className="lg:hidden text-on-surface-variant hover:text-white p-1"
-                >
-                  <span className="material-symbols-outlined text-base">close</span>
-                </button>
-              )}
+      {/* Main 3-Column Workspace Container - Offset top padding to clear fixed floating pill Navbar */}
+      <main className="flex-1 max-w-[1720px] w-full mx-auto px-3 sm:px-4 md:px-6 pt-20 sm:pt-24 pb-3 sm:pb-4 flex flex-col min-h-0 relative z-10">
+        {/* Banner feedback */}
+        {error && (
+          <div className="mb-2.5 px-4 py-2 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between shadow-lg">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+              <span>{error}</span>
             </div>
+            <button onClick={() => setError(null)} className="text-rose-400 hover:text-white">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+        {success && (
+          <div className="mb-2.5 px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between shadow-lg">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              <span>{success}</span>
+            </div>
+            <button onClick={() => setSuccess(null)} className="text-emerald-400 hover:text-white">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/30 to-tertiary/20 border border-primary/30 flex items-center justify-center text-primary font-bold text-sm shrink-0 shadow-md">
-                {group.name.slice(0, 2).toUpperCase()}
+        {/* 3-COLUMN LAYOUT: Sized to prevent laptop window scrollbar while ensuring minimum height on smaller displays */}
+        <div className="flex flex-col lg:flex-row gap-3.5 xl:gap-4 flex-1 min-h-[520px] lg:min-h-[460px] lg:h-[calc(100vh-170px)] xl:h-[calc(100vh-180px)] lg:max-h-[760px] xl:max-h-[820px]">
+          {/* ========================================================= */}
+          {/* COLUMN 1: LEFT SIDEBAR (COHORT PROFILE & NAVIGATION)     */}
+          {/* ========================================================= */}
+          <aside className="w-full lg:w-72 xl:w-80 flex-shrink-0 flex flex-col gap-3.5 bg-[#0b0f19]/90 backdrop-blur-xl border border-white/[0.08] rounded-2xl p-4 shadow-xl overflow-hidden min-h-0">
+            {/* Top Back Navigation Link */}
+            <Link
+              href="/groups"
+              className="inline-flex items-center gap-2 text-xs font-medium text-slate-400 hover:text-white transition-colors group"
+            >
+              <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+              <span>Cohorts Hub</span>
+            </Link>
+
+            {/* Cohort Avatar & Identity Card */}
+            <div className="flex items-center gap-3 pt-1">
+              <div className="w-12 h-12 rounded-xl bg-[#13192b] border border-white/10 flex items-center justify-center font-bold text-base text-slate-200 tracking-wider shadow-inner flex-shrink-0">
+                {group.name ? getInitials(group.name) : "QC"}
               </div>
-
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <h1 className="text-base font-extrabold text-white truncate leading-tight" title={group.name}>
+                  <h2 className="text-base font-bold text-white truncate" title={group.name}>
                     {group.name}
-                  </h1>
-                  {/* Live WebSocket Status Dot */}
+                  </h2>
                   <span
-                    title={isConnected ? "WebSocket Online & Synced" : "Connecting WebSocket..."}
-                    className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                      isConnected
-                        ? "bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]"
-                        : "bg-amber-400"
-                    }`}
+                    className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] flex-shrink-0"
+                    title="Active Cohort"
                   />
                 </div>
-
-                <div className="flex items-center gap-1.5 mt-1">
+                {/* Cohort Code Badge */}
+                <div className="mt-1">
                   <button
                     onClick={handleCopyCode}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/[0.04] hover:bg-white/[0.08] text-primary border border-primary/25 text-[11px] font-mono font-bold cursor-pointer transition-colors"
-                    title="Click to copy cohort code"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-[#13192b] hover:bg-[#1c243d] border border-white/10 text-xs font-mono text-slate-300 hover:text-white transition group"
+                    title="Click to copy invite code"
                   >
                     <span>{group.code}</span>
-                    <span className="material-symbols-outlined text-[10px]">
-                      {copiedCode ? "check" : "content_copy"}
-                    </span>
+                    {copiedCode ? (
+                      <Check className="w-3 h-3 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3 h-3 text-slate-400 group-hover:text-white" />
+                    )}
+                    {copiedCode && (
+                      <span className="text-[10px] text-emerald-400 font-sans font-medium ml-0.5">
+                        Copied!
+                      </span>
+                    )}
                   </button>
-
-                  {group.isLocked && (
-                    <span className="px-1.5 py-0.5 rounded text-[9px] uppercase font-bold bg-red-500/15 text-red-400 border border-red-500/30">
-                      Locked
-                    </span>
-                  )}
                 </div>
               </div>
             </div>
 
-            {group.description && (
-              <p className="text-[11px] text-on-surface-variant mt-2.5 line-clamp-2 leading-relaxed">
-                {group.description}
-              </p>
-            )}
+            {/* Link under header */}
+            <div className="text-[11px] text-slate-500 hover:text-slate-400 cursor-pointer transition">
+              Report bugs here
+            </div>
 
-            {/* Quick Actions */}
-            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/5">
+            {/* Action Buttons Row */}
+            <div className="flex items-center gap-2">
               <button
-                onClick={handleCopyInviteLink}
-                className="flex-1 py-1.5 px-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-white text-[11px] font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                onClick={() => setShowInviteModal(true)}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#13192b] hover:bg-[#1a233c] border border-white/10 text-xs font-medium text-slate-200 hover:text-white transition shadow-sm"
               >
-                <span className="material-symbols-outlined text-xs text-tertiary">
-                  {copiedLink ? "check" : "share"}
-                </span>
-                <span>{copiedLink ? "Copied!" : "Share Invite"}</span>
+                <Share2 className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Invite Cadets</span>
               </button>
 
               {isCreatorOrAdmin && (
                 <button
                   onClick={handleOpenAssignModal}
-                  className="py-1.5 px-3 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white text-[11px] font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer shadow-sm"
-                  title="Assign Quiz to this Cohort"
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-xs font-semibold text-white shadow-lg shadow-violet-600/30 transition hover:shadow-violet-600/50"
                 >
-                  <span className="material-symbols-outlined text-xs">post_add</span>
+                  <ClipboardList className="w-3.5 h-3.5" />
                   <span>Assign</span>
                 </button>
               )}
             </div>
-          </div>
 
-          {/* Sidebar Channels / Navigation Tabs */}
-          <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-            <span className="block px-2 py-1 text-[10px] font-mono font-bold uppercase tracking-wider text-outline">
-              Cohort Navigation
-            </span>
-
-            {/* 1. Discussion Room */}
-            <button
-              onClick={() => {
-                setActiveTab("discussion");
-                setMobileSidebarOpen(false);
-              }}
-              className={`w-full px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center justify-between ${
-                activeTab === "discussion"
-                  ? "bg-primary text-white shadow-lg shadow-primary/25"
-                  : "text-on-surface-variant hover:bg-white/[0.04] hover:text-white"
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-base">forum</span>
-                <span>Discussion Room</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {isConnected && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                )}
-                <span
-                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                    activeTab === "discussion" ? "bg-white/20 text-white" : "bg-white/10 text-on-surface-variant"
-                  }`}
-                >
-                  {messages.length}
-                </span>
-              </div>
-            </button>
-
-            {/* 2. Assigned Quizzes */}
-            <button
-              onClick={() => {
-                setActiveTab("quizzes");
-                setMobileSidebarOpen(false);
-              }}
-              className={`w-full px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center justify-between ${
-                activeTab === "quizzes"
-                  ? "bg-primary text-white shadow-lg shadow-primary/25"
-                  : "text-on-surface-variant hover:bg-white/[0.04] hover:text-white"
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-base">quiz</span>
-                <span>Assigned Quizzes</span>
-              </div>
-              <span
-                className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                  activeTab === "quizzes" ? "bg-white/20 text-white" : "bg-white/10 text-on-surface-variant"
-                }`}
-              >
-                {quizzes.length}
+            {/* Section Heading: COHORT NAVIGATION */}
+            <div className="mt-2">
+              <span className="text-[10px] font-bold text-slate-500 tracking-wider uppercase px-1">
+                COHORT NAVIGATION
               </span>
-            </button>
+            </div>
 
-            {/* 3. Cohort Gradebook (Admin/Creator) */}
-            {isCreatorOrAdmin && (
+            {/* Nav Items (Only Discussion Room and Assigned Quizzes) */}
+            <nav className="flex flex-col gap-1.5 flex-1 min-h-0 overflow-y-auto pr-0.5">
+              {/* 1. Discussion Room */}
               <button
-                onClick={() => {
-                  setActiveTab("gradebook");
-                  setMobileSidebarOpen(false);
-                }}
-                className={`w-full px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center justify-between ${
-                  activeTab === "gradebook"
-                    ? "bg-primary text-white shadow-lg shadow-primary/25"
-                    : "text-on-surface-variant hover:bg-white/[0.04] hover:text-white"
+                onClick={() => setActiveTab("discussion")}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition ${
+                  activeTab === "discussion"
+                    ? "bg-gradient-to-r from-[#7c3aed] to-[#6366f1] text-white shadow-[0_0_20px_rgba(124,58,237,0.35)]"
+                    : "text-slate-400 hover:text-white hover:bg-white/5"
                 }`}
               >
                 <div className="flex items-center gap-2.5">
-                  <span className="material-symbols-outlined text-base">table_chart</span>
-                  <span>Cohort Gradebook</span>
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Discussion Room</span>
                 </div>
-                <span className="text-[10px] font-mono uppercase text-tertiary">Matrix</span>
-              </button>
-            )}
-
-            {/* 4. Members */}
-            <button
-              onClick={() => {
-                setActiveTab("members");
-                setMobileSidebarOpen(false);
-              }}
-              className={`w-full px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center justify-between ${
-                activeTab === "members"
-                  ? "bg-primary text-white shadow-lg shadow-primary/25"
-                  : "text-on-surface-variant hover:bg-white/[0.04] hover:text-white"
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                <span className="material-symbols-outlined text-base">people</span>
-                <span>Members &amp; Roster</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {pendingMembers.length > 0 && isCreatorOrAdmin && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-black font-bold text-[10px]">
-                    {pendingMembers.length}
+                {unreadCount > 0 && activeTab !== "discussion" && (
+                  <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold animate-pulse">
+                    {unreadCount}
                   </span>
                 )}
-                <span
-                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                    activeTab === "members" ? "bg-white/20 text-white" : "bg-white/10 text-on-surface-variant"
-                  }`}
-                >
-                  {members.length}
-                </span>
-              </div>
-            </button>
+              </button>
 
-            {/* 5. Cohort Settings (Admin/Creator) */}
-            {isCreatorOrAdmin && (
+              {/* 2. Assigned Quizzes */}
               <button
-                onClick={() => {
-                  setActiveTab("settings");
-                  setMobileSidebarOpen(false);
-                }}
-                className={`w-full px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-2.5 ${
-                  activeTab === "settings"
-                    ? "bg-primary text-white shadow-lg shadow-primary/25"
-                    : "text-on-surface-variant hover:bg-white/[0.04] hover:text-white"
+                onClick={() => setActiveTab("quizzes")}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${
+                  activeTab === "quizzes"
+                    ? "bg-gradient-to-r from-[#7c3aed] to-[#6366f1] text-white shadow-[0_0_20px_rgba(124,58,237,0.35)] font-semibold"
+                    : "text-slate-400 hover:text-white hover:bg-white/5"
                 }`}
               >
-                <span className="material-symbols-outlined text-base">tune</span>
-                <span>Cohort Settings</span>
+                <div className="flex items-center gap-2.5">
+                  <FileText className="w-4 h-4" />
+                  <span>Assigned Quizzes</span>
+                </div>
+                <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[11px] font-semibold border border-white/10">
+                  {quizzes.length}
+                </span>
               </button>
-            )}
-          </nav>
+            </nav>
 
-          {/* Sidebar Footer / Telemetry Status */}
-          <div className="p-3.5 border-t border-white/10 bg-white/[0.01] text-xs space-y-2">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="text-on-surface-variant flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-xs text-primary">sensors</span>
-                Presence:
+            {/* Sidebar Footer: WebSocket status */}
+            <div className="pt-2.5 border-t border-white/[0.06] flex items-center justify-between text-[11px] text-slate-500">
+              <span className="flex items-center gap-1.5">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isConnected ? "bg-emerald-400 animate-pulse" : "bg-rose-400"
+                  }`}
+                />
+                <span>{isConnected ? "Comms Live" : "Reconnecting..."}</span>
               </span>
-              <span className="font-mono text-emerald-400 font-bold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                {activeCadetsCount} {activeCadetsCount === 1 ? "Cadet" : "Cadets"} Active
-              </span>
+              <span className="font-mono text-[10px]">{group.accessMode || "PUBLIC"}</span>
             </div>
+          </aside>
 
-            <div className="flex items-center justify-between text-[11px] text-on-surface-variant font-mono">
-              <span>Sync Engine:</span>
-              <span className={isConnected ? "text-emerald-400" : "text-amber-400"}>
-                {isConnected ? "WebSocket Live" : "Polling Mode"}
-              </span>
-            </div>
-          </div>
-        </aside>
-
-        {/* ==================== MAIN EXPANSIVE WORKSPACE AREA ==================== */}
-        <main className="flex-1 min-w-0 bg-[#0a0e1f]/85 backdrop-blur-2xl border border-white/10 rounded-2xl flex flex-col overflow-hidden shadow-2xl relative">
-          {/* Guest / Non-member Banner */}
-          {!isMember && (
-            <div className="p-3 bg-tertiary/15 border-b border-tertiary/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-tertiary shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-base shrink-0">info</span>
-                <span>You are viewing this public cohort as a guest. Join to participate in discussions and mission quizzes!</span>
-              </div>
-              <button
-                onClick={handleJoinCohortDirectly}
-                className="px-3 py-1 rounded-xl bg-tertiary text-black font-bold hover:bg-tertiary/90 transition-all shrink-0 cursor-pointer shadow-md text-xs"
-              >
-                Join Cohort Now
-              </button>
-            </div>
-          )}
-
-          {/* Alerts Banner */}
-          {error && (
-            <div className="p-3 bg-red-500/15 border-b border-red-500/30 text-red-200 text-xs flex items-center justify-between shrink-0">
-              <span className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-red-400 text-base">error</span>
-                {error}
-              </span>
-              <button onClick={() => setError(null)} className="cursor-pointer text-red-400 hover:text-white">
-                <span className="material-symbols-outlined text-sm">close</span>
-              </button>
-            </div>
-          )}
-
-          {success && (
-            <div className="p-3 bg-emerald-500/15 border-b border-emerald-500/30 text-emerald-200 text-xs flex items-center justify-between shrink-0">
-              <span className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-emerald-400 text-base">check_circle</span>
-                {success}
-              </span>
-              <button onClick={() => setSuccess(null)} className="cursor-pointer text-emerald-400 hover:text-white">
-                <span className="material-symbols-outlined text-sm">close</span>
-              </button>
-            </div>
-          )}
-
-          {/* ==================== TAB 1: DISCUSSION ROOM (EXPANDED TO FULL HEIGHT) ==================== */}
-          {activeTab === "discussion" && (
-            <div className="flex-1 flex flex-col h-full min-h-0">
-              {/* Channel Top Header Bar */}
-              <div className="h-14 px-4 sm:px-6 border-b border-white/10 bg-white/[0.02] flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-3 min-w-0">
-                  <button
-                    onClick={() => setMobileSidebarOpen(true)}
-                    className="lg:hidden p-1.5 rounded-lg bg-white/[0.04] text-white hover:bg-white/[0.08]"
-                    title="Open Cohort Channels"
-                  >
-                    <span className="material-symbols-outlined text-base">menu</span>
-                  </button>
-
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="material-symbols-outlined text-primary text-xl">forum</span>
-                    <h2 className="font-headline-sm text-sm sm:text-base font-bold text-white truncate">
-                      Cohort Discussion Stream
-                    </h2>
+          {/* ========================================================= */}
+          {/* COLUMN 2: MIDDLE STAGE (DISCUSSION STREAM / QUIZZES)      */}
+          {/* ========================================================= */}
+          <section className="flex-1 min-w-0 bg-[#080c16]/95 backdrop-blur-xl border border-white/[0.08] rounded-2xl flex flex-col h-full overflow-hidden shadow-2xl min-h-[480px] sm:min-h-[520px] lg:min-h-0">
+            {activeTab === "discussion" ? (
+              /* TAB: DISCUSSION STREAM */
+              <div className="flex flex-col h-full">
+                {/* Header Bar matching mockup */}
+                <div className="p-4 border-b border-white/[0.08] flex items-center justify-between gap-3 bg-[#0a0f1e]/60 flex-shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 flex-shrink-0">
+                      <MessageSquare className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">Discussion Stream</h3>
+                      <p className="text-[11px] font-mono text-slate-400">
+                        Real-time Cadet Mission Comms
+                      </p>
+                    </div>
                   </div>
 
-                  {/* WebSocket Live Badge */}
-                  <span
-                    className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono border ${
-                      isConnected
-                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                        : "bg-amber-500/10 text-amber-400 border-amber-500/30"
-                    }`}
-                  >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        isConnected ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
-                      }`}
-                    />
-                    {isConnected ? "WebSocket Real-Time" : "Reconnecting..."}
-                  </span>
-                </div>
+                  {/* Right Header Controls: Search, Members count, Menu */}
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Search messages..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="bg-[#101423] border border-white/10 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 w-32 sm:w-48 focus:outline-none focus:border-violet-500/60 transition"
+                      />
+                    </div>
 
-                <div className="flex items-center gap-3">
-                  {/* Pinned Announcements Toggle */}
-                  {pinnedMessages.length > 0 && (
-                    <button
-                      onClick={() => setShowPinnedDropdown(!showPinnedDropdown)}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium border transition-colors cursor-pointer ${
-                        showPinnedDropdown
-                          ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-                          : "bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20"
-                      }`}
-                      title="View Pinned Instructor Notices"
+                    <div
+                      className="px-2.5 py-1.5 rounded-xl bg-[#101423] border border-white/10 text-xs text-slate-300 font-medium flex items-center gap-1.5"
+                      title="Total Cohort Members"
                     >
-                      <span className="material-symbols-outlined text-xs">keep</span>
-                      <span>{pinnedMessages.length} Pinned</span>
-                    </button>
-                  )}
+                      <Users className="w-3.5 h-3.5 text-violet-400" />
+                      <span>{members.length}</span>
+                    </div>
 
-                  <span className="text-on-surface-variant text-xs font-mono hidden md:inline">
-                    {messages.length} messages
-                  </span>
+                    {pinnedCount > 0 && (
+                      <button
+                        onClick={() => setShowPinnedOnly(!showPinnedOnly)}
+                        className={`p-1.5 rounded-xl border border-white/10 transition ${
+                          showPinnedOnly
+                            ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                            : "bg-[#101423] text-slate-400 hover:text-white"
+                        }`}
+                        title={showPinnedOnly ? "Show all transmissions" : "Filter pinned announcements"}
+                      >
+                        <Pin className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Pinned Announcements Collapsible Panel */}
-              {pinnedMessages.length > 0 && showPinnedDropdown && (
-                <div className="p-3.5 bg-amber-500/10 border-b border-amber-500/25 text-xs animate-fadeIn shrink-0">
-                  <div className="flex items-center justify-between mb-2 text-amber-400 font-bold">
-                    <div className="flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-sm">keep</span>
-                      <span>Pinned Instructor Announcements ({pinnedMessages.length})</span>
+                {/* Question attachment pill preview (if student attached a context) */}
+                {questionContext && (
+                  <div className="px-4 py-2 bg-violet-950/40 border-b border-violet-500/20 flex items-center justify-between text-xs text-violet-200">
+                    <div className="flex items-center gap-2 truncate">
+                      <HelpCircle className="w-4 h-4 text-violet-400 flex-shrink-0" />
+                      <span className="font-semibold text-white">Referencing Question:</span>
+                      <span className="truncate italic">"{questionContext.questionSnippet}"</span>
                     </div>
                     <button
-                      onClick={() => setShowPinnedDropdown(false)}
-                      className="text-amber-400 hover:text-white"
+                      onClick={() => setQuestionContext(null)}
+                      className="text-violet-400 hover:text-white ml-2"
                     >
-                      <span className="material-symbols-outlined text-xs">close</span>
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-                    {pinnedMessages.map((pm) => (
-                      <div
-                        key={pm.messageId}
-                        className="p-2 rounded-lg bg-black/40 border border-amber-500/20 text-amber-100 flex items-start justify-between gap-2"
-                      >
-                        <div>
-                          <div className="text-[10px] text-amber-300 font-bold mb-0.5">
-                            {pm.authorName || pm.senderName} &bull;{" "}
-                            {new Date(pm.createdAt).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </div>
-                          <p className="whitespace-pre-wrap">{pm.content}</p>
-                        </div>
-                        {isCreatorOrAdmin && (
-                          <button
-                            onClick={() => handlePinMessage(pm.messageId)}
-                            className="text-amber-400 hover:text-white p-1"
-                            title="Unpin"
+                )}
+
+                {/* Messages Feed */}
+                <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+                  {/* "Today" date divider pill */}
+                  <div className="relative flex py-2 items-center">
+                    <div className="flex-grow border-t border-white/[0.06]"></div>
+                    <span className="flex-shrink mx-4 px-3 py-0.5 rounded-full bg-[#101423] border border-white/[0.08] text-[11px] font-medium text-slate-400">
+                      Today
+                    </span>
+                    <div className="flex-grow border-t border-white/[0.06]"></div>
+                  </div>
+
+                  {filteredMessages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-center text-slate-500">
+                      <MessageSquare className="w-10 h-10 stroke-[1.5] mb-2 text-slate-600" />
+                      <p className="text-xs">No comms transmissions yet.</p>
+                      <p className="text-[11px] text-slate-600 mt-1">
+                        Send the first message to ignite the cohort discussion!
+                      </p>
+                    </div>
+                  ) : (
+                    filteredMessages.map((msg) => {
+                      const isOwnMessage =
+                        Boolean(user?.userId && msg.authorId && user.userId === msg.authorId) ||
+                        Boolean(user?.userId && msg.senderId && user.userId === msg.senderId) ||
+                        Boolean(
+                          user?.username &&
+                            (msg.authorName || msg.senderName) &&
+                            user.username.toLowerCase() ===
+                              (msg.authorName || msg.senderName)?.toLowerCase()
+                        );
+
+                      const authorName = msg.authorName || msg.senderName || "Cadet";
+                      const authorId = msg.authorId || msg.senderId;
+                      const isInstructorMsg =
+                        Boolean(authorId && group.creatorId && authorId === group.creatorId) ||
+                        Boolean(
+                          group.creator?.username &&
+                            authorName.toLowerCase() === group.creator.username.toLowerCase()
+                        ) ||
+                        msg.authorRole === "ORG_ADMIN" ||
+                        msg.authorRole === "SUPER_ADMIN" ||
+                        msg.senderRole === "INSTRUCTOR";
+
+                      if (isOwnMessage) {
+                        /* ======================================================== */
+                        /* "YOU" MESSAGE BUBBLE - MATCHING ZOOMED MOCKUP IMAGE       */
+                        /* ======================================================== */
+                        return (
+                          <div
+                            key={msg.messageId}
+                            className="flex flex-col items-end group relative"
                           >
-                            <span className="material-symbols-outlined text-xs">keep_off</span>
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                            {/* Header above bubble: "You [INSTRUCTOR] 12:01 PM" */}
+                            <div className="flex items-center gap-2 mb-1 justify-end">
+                              <span className="text-xs font-semibold text-white">You</span>
+                              {isInstructorMsg && (
+                                <span className="text-[10px] font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.2 rounded-full uppercase tracking-wider">
+                                  Instructor
+                                </span>
+                              )}
+                              <span className="text-[10px] text-slate-400">
+                                {formatTime(msg.createdAt)}
+                              </span>
+                            </div>
 
-              {/* Messages Main Scroll Stream (Massive Space) */}
-              <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4">
-                {unpinnedMessages.length === 0 && pinnedMessages.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center text-on-surface-variant p-6">
-                    <div className="w-14 h-14 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-center mb-3 text-tertiary">
-                      <span className="material-symbols-outlined text-3xl">chat_bubble_outline</span>
-                    </div>
-                    <h3 className="text-sm font-bold text-white">Discussion Room Initialized</h3>
-                    <p className="text-xs text-on-surface-variant mt-1 max-w-sm">
-                      Be the first cadet to start a study discussion, ask about quiz questions, or share insights!
-                    </p>
-                  </div>
-                ) : (
-                  unpinnedMessages.map((msg) => {
-                    const authorId = msg.authorId || msg.senderId;
-                    const isMine = authorId === user?.userId;
-                    const authorName = msg.authorName || msg.senderName || "Cadet Pilot";
-                    const authorRole = msg.authorRole || msg.senderRole;
+                            {/* Message Bubble: Soft Violet/Purple Gradient Squircle with ambient glow */}
+                            <div className="bg-gradient-to-r from-[#7c3aed] to-[#9333ea] text-white font-medium text-xs px-4 py-2.5 rounded-2xl max-w-lg shadow-[0_4px_16px_rgba(139,92,246,0.35)] leading-relaxed relative">
+                              {msg.questionContext && (
+                                <div className="mb-2 p-2 rounded-lg bg-black/20 border border-white/10 text-[11px] text-white/90">
+                                  <div className="flex items-center gap-1 font-semibold text-violet-200">
+                                    <HelpCircle className="w-3 h-3" />
+                                    <span>Clarification on Question</span>
+                                  </div>
+                                  <p className="italic mt-0.5 line-clamp-2">
+                                    "{msg.questionContext.questionSnippet}"
+                                  </p>
+                                </div>
+                              )}
+                              <span>{msg.content}</span>
+                            </div>
 
-                    return (
-                      <div
-                        key={msg.messageId}
-                        className={`flex flex-col ${isMine ? "items-end" : "items-start"} animate-fadeIn`}
-                      >
-                        <div className="flex items-center gap-2 mb-1 text-[11px]">
-                          <span className="font-semibold text-white">
-                            {isMine ? "You" : authorName}
-                          </span>
-                          {authorRole && (
-                            <span
-                              className={`px-1.5 py-0.2 rounded text-[9px] uppercase font-mono font-bold ${
-                                authorRole === "SUPER_ADMIN"
-                                  ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                                  : authorRole === "ORG_ADMIN"
-                                  ? "bg-primary/20 text-primary border border-primary/30"
-                                  : authorRole === "ORG_PARTNER"
-                                  ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
-                                  : "bg-white/10 text-on-surface-variant border border-white/10"
-                              }`}
-                            >
-                              {authorRole}
-                            </span>
-                          )}
-                          <span className="text-outline text-[10px]">
-                            {new Date(msg.createdAt).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                        </div>
+                            {/* Message Actions on Hover */}
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 mt-1 pr-1">
+                              {isCreatorOrAdmin && (
+                                <button
+                                  onClick={() => handlePinMessage(msg.messageId)}
+                                  className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-amber-400 text-[10px]"
+                                  title={msg.isPinned ? "Unpin message" : "Pin message"}
+                                >
+                                  <Pin className="w-3 h-3" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDeleteMessage(msg.messageId)}
+                                className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-rose-400 text-[10px]"
+                                title="Delete transmission"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
 
-                        <div
-                          className={`max-w-2xl rounded-2xl p-4 text-xs text-white relative group shadow-md transition-all ${
-                            isMine
-                              ? "bg-primary text-white shadow-primary/20"
-                              : "bg-white/[0.05] border border-white/10 hover:border-white/20"
-                          }`}
-                        >
-                          {/* Linked Question Context Snippet */}
-                          {msg.questionContext && (
-                            <div className="mb-2.5 p-3 rounded-xl bg-black/50 border border-white/10 text-[11px]">
-                              <div className="flex items-center gap-1.5 text-tertiary font-bold mb-1">
-                                <span className="material-symbols-outlined text-xs">help</span>
-                                <span>Question In Reference:</span>
-                              </div>
-                              <p className="text-white font-medium italic leading-relaxed">
-                                "{msg.questionContext.questionSnippet}"
-                              </p>
-                              {msg.questionContext.quizTitle && (
-                                <span className="text-[10px] text-on-surface-variant mt-1.5 block font-mono">
-                                  Quiz: {msg.questionContext.quizTitle}
+                      /* ======================================================== */
+                      /* OTHER CADET MESSAGE BUBBLE - MATCHING MOCKUP              */
+                      /* ======================================================== */
+                      return (
+                        <div key={msg.messageId} className="flex items-start gap-2.5 group">
+                          {/* Initials Avatar Circle */}
+                          <div className="w-8 h-8 rounded-full bg-[#13192b] border border-white/10 flex items-center justify-center font-bold text-xs text-cyan-300 flex-shrink-0 mt-0.5">
+                            {getInitials(authorName)}
+                          </div>
+
+                          <div className="flex flex-col items-start max-w-lg">
+                            {/* Header: "Aryan 02:30 AM" */}
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-semibold text-slate-200">
+                                {authorName}
+                              </span>
+                              {isInstructorMsg && (
+                                <span className="text-[10px] font-semibold text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.2 rounded-full uppercase tracking-wider">
+                                  Instructor
+                                </span>
+                              )}
+                              <span className="text-[10px] text-slate-500">
+                                {formatTime(msg.createdAt)}
+                              </span>
+                              {msg.isPinned && (
+                                <span className="text-[10px] text-amber-400 flex items-center gap-0.5">
+                                  <Pin className="w-2.5 h-2.5 fill-amber-400" />
+                                  <span>Pinned</span>
                                 </span>
                               )}
                             </div>
-                          )}
 
-                          <p className="leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>
+                            {/* Dark Rounded Bubble */}
+                            <div className="bg-[#121626] border border-white/[0.08] text-white/95 rounded-2xl px-4 py-2.5 text-xs leading-relaxed shadow-sm">
+                              {msg.questionContext && (
+                                <div className="mb-2 p-2 rounded-lg bg-black/30 border border-white/10 text-[11px] text-slate-300">
+                                  <div className="flex items-center gap-1 font-semibold text-violet-400">
+                                    <HelpCircle className="w-3 h-3" />
+                                    <span>Question Reference</span>
+                                  </div>
+                                  <p className="italic mt-0.5 line-clamp-2">
+                                    "{msg.questionContext.questionSnippet}"
+                                  </p>
+                                </div>
+                              )}
+                              <span>{msg.content}</span>
+                            </div>
 
-                          {/* Hover Actions: Pin (Partner/Admin) or Delete */}
-                          <div className="absolute right-2 top-2 hidden group-hover:flex items-center gap-1 bg-black/80 rounded-lg p-1 backdrop-blur-sm border border-white/10">
+                            {/* Actions on Hover for Admin */}
                             {isCreatorOrAdmin && (
-                              <button
-                                onClick={() => handlePinMessage(msg.messageId)}
-                                className="text-on-surface-variant hover:text-amber-400 p-0.5 cursor-pointer"
-                                title="Pin Announcement"
-                              >
-                                <span className="material-symbols-outlined text-xs">keep</span>
-                              </button>
-                            )}
-                            {(isMine || isCreatorOrAdmin) && (
-                              <button
-                                onClick={() => handleDeleteMessage(msg.messageId)}
-                                className="text-on-surface-variant hover:text-red-400 p-0.5 cursor-pointer"
-                                title="Delete Message"
-                              >
-                                <span className="material-symbols-outlined text-xs">delete</span>
-                              </button>
+                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 mt-1 pl-1">
+                                <button
+                                  onClick={() => handlePinMessage(msg.messageId)}
+                                  className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-amber-400 text-[10px]"
+                                  title={msg.isPinned ? "Unpin message" : "Pin message"}
+                                >
+                                  <Pin className="w-3 h-3" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteMessage(msg.messageId)}
+                                  className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-rose-400 text-[10px]"
+                                  title="Delete message"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
                             )}
                           </div>
                         </div>
+                      );
+                    })
+                  )}
+
+                  {/* Typing Indicator */}
+                  {typingUsers.length > 0 && (
+                    <div className="flex items-center gap-2 text-[11px] text-slate-400 italic pt-1">
+                      <div className="flex gap-1 items-center">
+                        <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce delay-100" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce delay-200" />
                       </div>
-                    );
-                  })
-                )}
+                      <span>{typingUsers.join(", ")} typing...</span>
+                    </div>
+                  )}
 
-                {/* Real-Time Typing Indicator */}
-                {typingUsers.length > 0 && (
-                  <div className="flex items-center gap-2 text-xs text-tertiary font-mono animate-pulse pt-2">
-                    <span className="material-symbols-outlined text-sm">edit_note</span>
-                    <span>
-                      {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing...
-                    </span>
-                  </div>
-                )}
-
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Question Context Attached Banner */}
-              {questionContext && (
-                <div className="px-4 py-2 bg-primary/10 border-t border-primary/25 flex items-center justify-between text-xs shrink-0">
-                  <div className="flex items-center gap-2 overflow-hidden">
-                    <span className="material-symbols-outlined text-primary text-sm shrink-0">
-                      help_center
-                    </span>
-                    <span className="text-white truncate">
-                      Linked: <em>"{questionContext.questionSnippet}"</em> ({questionContext.quizTitle})
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => setQuestionContext(null)}
-                    className="text-on-surface-variant hover:text-white cursor-pointer ml-2"
-                  >
-                    <span className="material-symbols-outlined text-sm">close</span>
-                  </button>
+                  <div ref={messagesEndRef} />
                 </div>
-              )}
 
-              {/* Message Input Bar (Pinned at Bottom of Chat Viewport) */}
-              <div className="p-3 sm:p-4 border-t border-white/10 bg-white/[0.02] shrink-0">
-                <form onSubmit={handleSendMessage} className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowQuestionSelector(!showQuestionSelector)}
-                    className={`p-2.5 rounded-xl border transition-all cursor-pointer shrink-0 ${
-                      showQuestionSelector || questionContext
-                        ? "bg-tertiary/20 text-tertiary border-tertiary/40"
-                        : "bg-white/[0.04] hover:bg-white/[0.08] text-on-surface-variant hover:text-tertiary border-white/10"
-                    }`}
-                    title="Link a specific quiz question to your discussion"
-                  >
-                    <span className="material-symbols-outlined text-base">help_outline</span>
-                  </button>
+                {/* Bottom Input Bar matching mockup */}
+                <div className="p-3 bg-[#0a0f1e]/80 border-t border-white/[0.08] flex flex-col gap-1 flex-shrink-0">
+                  <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+                    {/* Attachment Paperclip Button (Attach Quiz Question) */}
+                    <button
+                      type="button"
+                      onClick={() => setShowQuestionSelector(!showQuestionSelector)}
+                      className={`w-10 h-10 rounded-xl border border-white/10 flex items-center justify-center transition flex-shrink-0 ${
+                        showQuestionSelector || questionContext
+                          ? "bg-violet-600/30 text-violet-300 border-violet-500/40"
+                          : "bg-[#121626] hover:bg-[#1a2138] text-slate-400 hover:text-white"
+                      }`}
+                      title="Attach quiz question context"
+                    >
+                      <Paperclip className="w-4 h-4" />
+                    </button>
 
-                  <input
-                    type="text"
-                    value={messageText}
-                    onChange={(e) => {
-                      setMessageText(e.target.value);
-                      sendTyping();
-                    }}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Write a message to your cohort... (Press Enter to send)"
-                    className="flex-1 px-4 py-3 rounded-xl bg-white/[0.04] border border-white/10 focus:border-primary text-xs sm:text-sm text-white outline-none transition-colors"
-                  />
-
-                  <button
-                    type="submit"
-                    disabled={sendingMessage || (!messageText.trim() && !questionContext)}
-                    className="p-3 rounded-xl bg-primary hover:bg-primary/90 text-white disabled:opacity-40 transition-all cursor-pointer shadow-lg shadow-primary/25 flex items-center justify-center shrink-0"
-                    title="Send Message"
-                  >
-                    {sendingMessage ? (
-                      <span className="material-symbols-outlined text-base animate-spin">
-                        progress_activity
-                      </span>
-                    ) : (
-                      <span className="material-symbols-outlined text-base">send</span>
-                    )}
-                  </button>
-                </form>
-
-                {/* Question Selector Drawer / Modal */}
-                {showQuestionSelector && (
-                  <div className="mt-3 p-3.5 rounded-xl border border-white/10 bg-[#070914] text-xs max-h-52 overflow-y-auto shadow-2xl">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-white flex items-center gap-1.5">
-                        <span className="material-symbols-outlined text-sm text-primary">link</span>
-                        Select a Quiz Question to Link:
-                      </span>
-                      <button
-                        onClick={() => setShowQuestionSelector(false)}
-                        className="text-on-surface-variant hover:text-white"
-                      >
-                        <span className="material-symbols-outlined text-sm">close</span>
-                      </button>
+                    {/* Text Input */}
+                    <div className="flex-1 relative">
+                      <input
+                        type="text"
+                        value={messageText}
+                        onChange={(e) => setMessageText(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Type a message..."
+                        disabled={sendingMessage}
+                        className="w-full bg-[#121626] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-violet-500/60 transition"
+                      />
                     </div>
 
-                    {quizzes.length === 0 ? (
-                      <p className="text-on-surface-variant text-[11px] p-2 text-center">
-                        No quizzes currently assigned in this cohort to link questions from.
-                      </p>
-                    ) : (
-                      <div className="space-y-1.5">
-                        {quizzes.flatMap((q) =>
-                          (q.questions || []).map((quest, idx) => (
+                    {/* Emoji Smiley Button */}
+                    <button
+                      type="button"
+                      onClick={() => setMessageText((prev) => prev + " 🚀 ")}
+                      className="w-10 h-10 rounded-xl bg-[#121626] hover:bg-[#1a2138] border border-white/10 flex items-center justify-center text-slate-400 hover:text-white transition flex-shrink-0"
+                      title="Insert emoji"
+                    >
+                      <Smile className="w-4 h-4" />
+                    </button>
+
+                    {/* Purple Circular/Squircle Send Button */}
+                    <button
+                      type="submit"
+                      disabled={sendingMessage || (!messageText.trim() && !questionContext)}
+                      className="w-10 h-10 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:hover:bg-violet-600 text-white flex items-center justify-center shadow-lg shadow-violet-600/30 transition flex-shrink-0"
+                      title="Send transmission"
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
+                  </form>
+
+                  {/* Subtext helper: "Press Enter to send" */}
+                  <div className="text-[10px] text-slate-500 pl-12">
+                    Press Enter to send
+                  </div>
+
+                  {/* Dropdown question selector if paperclip clicked */}
+                  {showQuestionSelector && (
+                    <div className="mt-2 p-3 rounded-xl bg-[#121626] border border-white/10 flex flex-col gap-2 max-h-48 overflow-y-auto">
+                      <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
+                        <span>Select Cohort Question to Clarify:</span>
+                        <button
+                          onClick={() => setShowQuestionSelector(false)}
+                          className="text-slate-500 hover:text-white"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      {quizzes.length === 0 ? (
+                        <p className="text-[11px] text-slate-500">
+                          No quizzes assigned to this cohort yet.
+                        </p>
+                      ) : (
+                        quizzes.map((q) => (
+                          <div key={q.quizId} className="flex flex-col gap-1">
+                            <span className="text-[11px] font-semibold text-violet-400 truncate">
+                              {q.title}
+                            </span>
                             <button
-                              key={`${q.quizId}-${quest.questionId || idx}`}
-                              type="button"
                               onClick={() => {
                                 setQuestionContext({
                                   quizId: q.quizId,
                                   quizTitle: q.title,
-                                  questionId: quest.questionId || `q-${idx}`,
-                                  questionSnippet: quest.question,
+                                  questionId: "general",
+                                  questionSnippet: `Discussion on mission: ${q.title}`,
                                 });
                                 setShowQuestionSelector(false);
                               }}
-                              className="w-full text-left p-2.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] border border-white/5 transition-colors flex items-center justify-between gap-2"
+                              className="text-left px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-violet-600/20 text-xs text-slate-300 transition"
                             >
-                              <span className="truncate text-white">
-                                <strong className="text-primary">{q.title}</strong>: {quest.question}
-                              </span>
-                              <span className="material-symbols-outlined text-xs text-primary shrink-0">
-                                add_circle
-                              </span>
+                              Attach quiz discussion reference
                             </button>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ==================== TAB 2: ASSIGNED QUIZZES (EXPANDED GRID) ==================== */}
-          {activeTab === "quizzes" && (
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/10">
-                <div>
-                  <h2 className="text-lg font-extrabold text-white">Assigned Mission Quizzes</h2>
-                  <p className="text-xs text-on-surface-variant mt-0.5">
-                    Quizzes released for study revision, timed tests, and cohort benchmarks.
-                  </p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
-
-                {isCreatorOrAdmin && (
-                  <button
-                    onClick={handleOpenAssignModal}
-                    className="px-4 py-2 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
-                  >
-                    <span className="material-symbols-outlined text-sm">post_add</span>
-                    <span>Assign Quiz</span>
-                  </button>
-                )}
               </div>
-
-              {quizzes.length === 0 ? (
-                <div className="rounded-2xl bg-white/[0.02] border border-white/10 p-12 text-center my-6">
-                  <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-3 text-primary">
-                    <span className="material-symbols-outlined text-3xl">assignment_late</span>
+            ) : (
+              /* TAB: ASSIGNED QUIZZES (WITH GROUP ARENA & LEADERBOARD) */
+              <div className="flex flex-col h-full overflow-hidden">
+                {/* Header */}
+                <div className="p-4 border-b border-white/[0.08] flex items-center justify-between gap-3 bg-[#0a0f1e]/60 flex-shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-400 flex-shrink-0">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">Assigned Quizzes</h3>
+                      <p className="text-[11px] font-mono text-slate-400">
+                        Cohort Missions & Exclusive Arenas
+                      </p>
+                    </div>
                   </div>
-                  <h3 className="text-base font-bold text-white">No Quizzes Assigned Yet</h3>
-                  <p className="text-xs text-on-surface-variant mt-1.5 max-w-sm mx-auto">
-                    Your instructor hasn't posted any mission quizzes to this cohort yet. Check back soon!
-                  </p>
+
                   {isCreatorOrAdmin && (
                     <button
                       onClick={handleOpenAssignModal}
-                      className="mt-4 px-4 py-2 rounded-xl bg-primary-container text-white text-xs font-semibold cursor-pointer"
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-xs font-semibold text-white shadow-lg shadow-violet-600/30 transition"
                     >
-                      Assign First Quiz
+                      <ClipboardList className="w-3.5 h-3.5" />
+                      <span>Assign Quiz</span>
                     </button>
                   )}
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {quizzes.map((quiz) => {
-                    const dueInfo = getDueDateStatus(quiz.dueDate);
-                    return (
-                      <div
-                        key={quiz.quizId}
-                        className="rounded-2xl bg-white/[0.03] border border-white/10 p-5 hover:border-primary/40 transition-all flex flex-col justify-between shadow-xl group"
-                      >
-                        <div>
-                          <div className="flex items-start justify-between gap-3 mb-2">
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${dueInfo.style}`}
-                            >
-                              {dueInfo.label}
-                            </span>
-                            <span className="text-[11px] text-on-surface-variant font-mono">
-                              {quiz.questions?.length ?? 0} Questions
-                            </span>
-                          </div>
 
-                          <h3 className="text-base font-bold text-white mt-1 group-hover:text-primary transition-colors">
-                            {quiz.title}
-                          </h3>
-                          <p className="text-[11px] text-on-surface-variant mt-1 line-clamp-1">
-                            Mode: {quiz.deploymentType || "ANYTIME"} &bull; Created by {quiz.ownerEmail}
-                          </p>
-                        </div>
-
-                        <div className="mt-5 pt-3 border-t border-white/10 flex items-center justify-between">
-                          <Link
-                            href={`/quiz/review/${quiz.quizId}`}
-                            className="text-xs text-on-surface-variant hover:text-white transition-colors"
-                          >
-                            Telemetry
-                          </Link>
-
-                          <Link
-                            href={`/quiz/attempt/${quiz.quizId}`}
-                            className="px-4 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-white font-semibold text-xs transition-all shadow-md flex items-center gap-1.5"
-                          >
-                            <span className="material-symbols-outlined text-sm">play_arrow</span>
-                            <span>{dueInfo.isPastDue ? "Practice Exam" : "Attempt Mission"}</span>
-                          </Link>
-                        </div>
+                {/* Quizzes Grid */}
+                <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4">
+                  {quizzes.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                      <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mb-4 text-slate-500">
+                        <FileText className="w-8 h-8" />
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+                      <h4 className="text-sm font-bold text-white">No Quizzes Assigned Yet</h4>
+                      <p className="text-xs text-slate-400 max-w-sm mt-1.5 leading-relaxed">
+                        {isCreatorOrAdmin
+                          ? "You haven't assigned any quizzes to this cohort. Click Assign Quiz above to schedule an exclusive arena or open homework mission."
+                          : "The instructor has not assigned any quiz missions to this cohort yet. Transmissions will appear here once posted."}
+                      </p>
+                      {isCreatorOrAdmin && (
+                        <button
+                          onClick={handleOpenAssignModal}
+                          className="mt-4 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-xs font-semibold text-white shadow-lg shadow-violet-600/30 transition"
+                        >
+                          Assign Generated Quiz
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {quizzes.map((quiz) => {
+                        const arenaStatus = getArenaStatus(quiz);
 
-          {/* ==================== TAB 3: GRADEBOOK MATRIX (WIDE HORIZONTAL SPREAD) ==================== */}
-          {activeTab === "gradebook" && isCreatorOrAdmin && (
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-white/10">
+                        return (
+                          <div
+                            key={quiz.quizId}
+                            className="p-4 rounded-2xl bg-[#0b0f19] border border-white/[0.08] hover:border-violet-500/40 transition flex flex-col justify-between gap-4 group shadow-lg"
+                          >
+                            <div className="space-y-2.5">
+                              {/* Status Badge & Code */}
+                              <div className="flex items-center justify-between gap-2">
+                                <span
+                                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wider border uppercase ${arenaStatus.color}`}
+                                >
+                                  {arenaStatus.badge}
+                                </span>
+                                {quiz.pin && (
+                                  <span className="font-mono text-xs text-slate-400 bg-white/5 px-2 py-0.5 rounded-md border border-white/10">
+                                    PIN: {quiz.pin}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Title */}
+                              <h4 className="text-sm font-bold text-white group-hover:text-violet-300 transition line-clamp-2">
+                                {quiz.title}
+                              </h4>
+
+                              {/* Timing & Question Specs */}
+                              <div className="space-y-1 text-xs text-slate-400">
+                                <div className="flex items-center gap-2">
+                                  <Clock className="w-3.5 h-3.5 text-violet-400" />
+                                  <span>{arenaStatus.desc}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Target className="w-3.5 h-3.5 text-cyan-400" />
+                                  <span>{quiz.questionCount || quiz.questions?.length || 10} Questions</span>
+                                  {quiz.liveDurationMinutes && (
+                                    <>
+                                      <span>•</span>
+                                      <span>{quiz.liveDurationMinutes}m Duration</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Actions Row */}
+                            <div className="pt-3 border-t border-white/[0.06] flex flex-wrap items-center justify-between gap-2">
+                              {/* Start / Launch button */}
+                              <button
+                                onClick={() => {
+                                  const pinParam = quiz.pin ? `&pin=${encodeURIComponent(quiz.pin)}` : "";
+                                  router.push(`/quiz?quizId=${encodeURIComponent(quiz.quizId)}${pinParam}`);
+                                }}
+                                className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-xs font-semibold text-white shadow-md shadow-violet-600/25 transition"
+                              >
+                                <Play className="w-3.5 h-3.5 fill-current" />
+                                <span>Enter Quiz</span>
+                              </button>
+
+                              {/* View Cohort Results / Leaderboard (Visible to everyone!) */}
+                              <button
+                                onClick={() => handleOpenResults(quiz.quizId)}
+                                className="flex-1 min-w-[120px] flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#13192b] hover:bg-[#1a233c] border border-white/10 text-xs font-semibold text-slate-200 hover:text-white transition"
+                                title="View Cohort Scoreboard & Rankings"
+                              >
+                                <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                                <span>Cohort Results</span>
+                              </button>
+
+                              {/* Instructor Remove button */}
+                              {isCreatorOrAdmin && (
+                                <button
+                                  onClick={() => handleUnassignQuiz(quiz.quizId)}
+                                  className="p-2 rounded-xl bg-white/5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition"
+                                  title="Unassign quiz from cohort"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* ========================================================= */}
+          {/* COLUMN 3: RIGHT SIDEBAR (MEMBERS PANEL)                   */}
+          {/* ========================================================= */}
+          <aside className="w-full lg:w-72 xl:w-80 flex-shrink-0 flex flex-col gap-3.5 bg-[#0b0f19]/90 backdrop-blur-xl border border-white/[0.08] rounded-2xl p-4 shadow-xl overflow-hidden min-h-0 max-h-80 lg:max-h-none">
+            {/* Header matching mockup */}
+            <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
+              <h3 className="text-sm font-bold text-white">Members ({members.length})</h3>
+              <div className="w-7 h-7 rounded-lg bg-[#13192b] border border-white/10 flex items-center justify-center text-slate-400">
+                <Users className="w-4 h-4" />
+              </div>
+            </div>
+
+            {/* Pending Admission Queue (for Instructor) */}
+            {isCreatorOrAdmin && pendingMembers.length > 0 && (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 flex flex-col gap-2">
+                <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">
+                  Pending Admission ({pendingMembers.length})
+                </span>
+                <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                  {pendingMembers.map((pending) => (
+                    <div
+                      key={pending.userId}
+                      className="flex items-center justify-between text-xs text-white"
+                    >
+                      <span className="truncate">{pending.fullName || pending.username}</span>
+                      <button
+                        onClick={() => handleApproveMember(pending.userId)}
+                        className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-[10px] font-bold text-white transition"
+                      >
+                        Approve
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Members Roster List matching mockup */}
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
+              {members.map((member) => {
+                const isCurrent =
+                  Boolean(user?.userId && member.userId === user.userId) ||
+                  Boolean(user?.username && member.username?.toLowerCase() === user.username.toLowerCase());
+
+                const isInstructor =
+                  Boolean(group.creatorId && member.userId === group.creatorId) ||
+                  Boolean(
+                    group.creator?.username &&
+                      member.username?.toLowerCase() === group.creator.username.toLowerCase()
+                  ) ||
+                  member.role === "ORG_ADMIN" ||
+                  member.role === "SUPER_ADMIN";
+
+                const displayName = isCurrent ? "You" : member.fullName || member.username;
+
+                return (
+                  <div
+                    key={member.userId}
+                    className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.04] transition group"
+                  >
+                    {/* Left: Avatar + Name + Green Active Dot */}
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {/* Initials Avatar */}
+                      <div className="w-8 h-8 rounded-full bg-[#13192b] border border-white/10 flex items-center justify-center font-bold text-xs text-slate-200 flex-shrink-0 shadow-sm">
+                        {getInitials(displayName === "You" ? user?.username || "AS" : displayName)}
+                      </div>
+
+                      {/* Display name with green status dot */}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span
+                          className={`text-xs truncate ${
+                            isCurrent ? "font-bold text-white" : "font-medium text-slate-200"
+                          }`}
+                        >
+                          {displayName}
+                        </span>
+                        {/* Green online dot */}
+                        <span
+                          className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)] flex-shrink-0"
+                          title="Online Cadet"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Right: Role Pill matching mockup */}
+                    <div>
+                      {isInstructor ? (
+                        <span className="text-amber-300 bg-amber-500/10 border border-amber-500/30 text-[10px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap">
+                          Instructor
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 bg-slate-800/80 border border-slate-700/50 text-[10px] font-medium px-2.5 py-0.5 rounded-full whitespace-nowrap">
+                          Cadet
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </aside>
+        </div>
+      </main>
+
+      {/* ========================================================= */}
+      {/* MODAL: ASSIGN QUIZ & SCHEDULE GROUP ARENA                */}
+      {/* ========================================================= */}
+      {showAssignModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0b0f19] border border-white/10 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-white/[0.08] flex items-center justify-between bg-[#0e1424]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-violet-400">
+                  <ClipboardList className="w-5 h-5" />
+                </div>
                 <div>
-                  <h2 className="text-lg font-extrabold text-white">Cohort Performance Matrix</h2>
-                  <p className="text-xs text-on-surface-variant mt-0.5">
-                    Real-time gradebook, accuracy percentiles, and submission matrices across all assigned quizzes.
+                  <h3 className="text-base font-bold text-white">Assign Quiz to Cohort</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Host a live Arena or assign homework to this group
                   </p>
                 </div>
-
-                <button
-                  onClick={handleExportGradebookCSV}
-                  className="px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-white text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer shadow-sm shrink-0"
-                >
-                  <span className="material-symbols-outlined text-sm text-emerald-400">download</span>
-                  <span>Export Gradebook CSV</span>
-                </button>
               </div>
-
-              {!gradebook || gradebook.students.length === 0 ? (
-                <div className="p-16 text-center text-on-surface-variant text-xs">
-                  No student attempts recorded in this cohort yet.
-                </div>
-              ) : (
-                <div className="rounded-xl border border-white/10 overflow-hidden bg-white/[0.02]">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-white/[0.04] text-on-surface-variant border-b border-white/10 font-semibold uppercase tracking-wider text-[11px]">
-                        <tr>
-                          <th className="py-3.5 px-4">Cadet Student</th>
-                          {gradebook.quizzes.map((q) => (
-                            <th key={q.quizId} className="py-3.5 px-4 text-center max-w-[140px] truncate">
-                              {q.title}
-                            </th>
-                          ))}
-                          <th className="py-3.5 px-4 text-center">Avg Score</th>
-                          <th className="py-3.5 px-4 text-center">Completed</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5 text-on-surface">
-                        {gradebook.students.map((student) => (
-                          <tr key={student.userId} className="hover:bg-white/[0.02] transition-colors">
-                            <td className="py-3.5 px-4 font-semibold text-white">
-                              <p>{student.fullName || student.username}</p>
-                              <span className="text-[10px] text-on-surface-variant font-mono">
-                                {student.email}
-                              </span>
-                            </td>
-                            {gradebook.quizzes.map((q) => {
-                              const result = student.scores[q.quizId];
-                              return (
-                                <td key={q.quizId} className="py-3.5 px-4 text-center">
-                                  {result ? (
-                                    <span
-                                      className={`px-2.5 py-1 rounded-md font-mono font-bold text-[11px] ${
-                                        result.percentage >= 80
-                                          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-                                          : result.percentage >= 50
-                                          ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
-                                          : "bg-red-500/15 text-red-400 border border-red-500/30"
-                                      }`}
-                                    >
-                                      {result.percentage}%
-                                    </span>
-                                  ) : (
-                                    <span className="text-outline text-xs">—</span>
-                                  )}
-                                </td>
-                              );
-                            })}
-                            <td className="py-3.5 px-4 text-center font-bold text-white text-sm">
-                              {student.averageScore}%
-                            </td>
-                            <td className="py-3.5 px-4 text-center text-on-surface-variant font-mono">
-                              {student.totalCompleted} / {gradebook.quizzes.length}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+              <button
+                onClick={() => setShowAssignModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-          )}
 
-          {/* ==================== TAB 4: MEMBERS & ROSTER ==================== */}
-          {activeTab === "members" && (
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-              <div className="pb-4 border-b border-white/10">
-                <h2 className="text-lg font-extrabold text-white">Enrolled Cadets &amp; Instructors</h2>
-                <p className="text-xs text-on-surface-variant mt-0.5">
-                  Cohort membership directory, participation credentials, and permissions.
-                </p>
-              </div>
-
-              {/* Pending Approval Queue */}
-              {pendingMembers.length > 0 && isCreatorOrAdmin && (
-                <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-5 shadow-lg">
-                  <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider mb-3">
-                    <span className="material-symbols-outlined text-base">how_to_reg</span>
-                    Pending Admission Requests ({pendingMembers.length})
-                  </div>
-                  <div className="space-y-2">
-                    {pendingMembers.map((pending) => (
-                      <div
-                        key={pending.userId}
-                        className="p-3.5 rounded-xl bg-black/40 border border-white/10 flex items-center justify-between text-xs"
-                      >
-                        <div>
-                          <p className="font-semibold text-white">
-                            {pending.fullName || pending.username}
-                          </p>
-                          <span className="text-[11px] text-on-surface-variant font-mono">
-                            {pending.email}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => handleApproveMember(pending.userId)}
-                          className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition-colors cursor-pointer"
-                        >
-                          Approve Admission
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Members List */}
-              <div className="rounded-2xl bg-white/[0.02] border border-white/10 overflow-hidden shadow-xl">
-                <div className="p-4 border-b border-white/10 font-bold text-xs text-white uppercase tracking-wider">
-                  Enrolled Members ({members.length})
-                </div>
-                <div className="divide-y divide-white/5 text-xs">
-                  {members.map((member) => (
-                    <div
-                      key={member.userId}
-                      className="p-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
+            <form onSubmit={handleAssignQuiz} className="p-5 space-y-4">
+              {/* Select Existing Quiz */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Select Generated Quiz:
+                </label>
+                {myAvailableQuizzes.length === 0 ? (
+                  <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-xs text-slate-400 flex items-center justify-between">
+                    <span>No quizzes found in your library.</span>
+                    <Link
+                      href="/create"
+                      className="text-violet-400 hover:underline font-semibold ml-2"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary/30 to-secondary/20 border border-primary/20 text-primary font-bold flex items-center justify-center text-xs">
-                          {(member.fullName || member.username).slice(0, 2).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="font-semibold text-white">
-                            {member.fullName || member.username}
-                          </p>
-                          <span className="text-[11px] text-on-surface-variant font-mono">
-                            {member.email}
-                          </span>
-                        </div>
-                      </div>
-                      <span
-                        className={`px-2.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                          member.role === "SUPER_ADMIN"
-                            ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                            : member.role === "ORG_ADMIN"
-                            ? "bg-primary/20 text-primary border border-primary/30"
-                            : member.role === "ORG_PARTNER"
-                            ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
-                            : "bg-white/[0.05] text-on-surface-variant border border-white/10"
-                        }`}
-                      >
-                        {member.role || "MEMBER"}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ==================== TAB 5: COHORT SETTINGS ==================== */}
-          {activeTab === "settings" && isCreatorOrAdmin && (
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-              <div className="pb-4 border-b border-white/10">
-                <h2 className="text-lg font-extrabold text-white">Cohort Security &amp; Access Controls</h2>
-                <p className="text-xs text-on-surface-variant mt-0.5">
-                  Configure admission requirements, invitation codes, and lock parameters.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Regenerate Code Card */}
-                <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/10 flex flex-col justify-between">
-                  <div>
-                    <span className="text-xs text-on-surface-variant font-medium">Active Invite Code</span>
-                    <p className="text-2xl font-bold font-mono text-primary mt-1.5">{group.code}</p>
-                    <p className="text-xs text-on-surface-variant mt-2 leading-relaxed">
-                      Regenerating immediately invalidates previous link access. Cadets using the old code will no longer be able to join.
-                    </p>
+                      + Generate Quiz
+                    </Link>
                   </div>
-                  <button
-                    onClick={handleRegenerateCode}
-                    className="mt-4 px-4 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-white text-xs border border-white/10 transition-colors cursor-pointer flex items-center gap-2 justify-center"
+                ) : (
+                  <select
+                    value={selectedQuizId}
+                    onChange={(e) => setSelectedQuizId(e.target.value)}
+                    required
+                    className="w-full bg-[#121626] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 transition"
                   >
-                    <span className="material-symbols-outlined text-sm">sync</span>
-                    <span>Regenerate 6-Char Code</span>
-                  </button>
-                </div>
-
-                {/* Lock & Approval Toggles */}
-                <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/10 space-y-4">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={isLocked}
-                      onChange={(e) => setIsLocked(e.target.checked)}
-                      className="w-4 h-4 mt-0.5 rounded accent-primary cursor-pointer"
-                    />
-                    <div>
-                      <span className="block text-xs font-bold text-white">Lock Cohort</span>
-                      <span className="block text-[11px] text-on-surface-variant mt-0.5">
-                        Disallow all new code admissions. Existing members retain full access.
-                      </span>
-                    </div>
-                  </label>
-
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={requireApproval}
-                      onChange={(e) => setRequireApproval(e.target.checked)}
-                      className="w-4 h-4 mt-0.5 rounded accent-primary cursor-pointer"
-                    />
-                    <div>
-                      <span className="block text-xs font-bold text-white">Require Instructor Approval</span>
-                      <span className="block text-[11px] text-on-surface-variant mt-0.5">
-                        Cadets entering the code must be approved by the instructor before entering.
-                      </span>
-                    </div>
-                  </label>
-
-                  <button
-                    onClick={handleSaveSecuritySettings}
-                    className="w-full mt-2 py-2 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white text-xs font-semibold cursor-pointer shadow-md transition-all"
-                  >
-                    Save Preferences
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </main>
-      </div>
-
-      {/* ==================== MODAL: ASSIGN QUIZ ==================== */}
-      {showAssignQuizModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-3xl bg-[#0b0e1b] border border-white/15 p-6 shadow-2xl relative animate-fadeIn">
-            <button
-              onClick={() => setShowAssignQuizModal(false)}
-              className="absolute top-6 right-6 text-on-surface-variant hover:text-white transition-colors cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-xl">close</span>
-            </button>
-
-            <div className="flex items-center gap-2 mb-4 text-primary">
-              <span className="material-symbols-outlined text-xl">post_add</span>
-              <h2 className="text-lg font-bold text-white">Assign Quiz to Cohort</h2>
-            </div>
-
-            <form onSubmit={handleAssignQuiz} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-on-surface-variant">
-                  Select Quiz <span className="text-primary">*</span>
-                </label>
-                <select
-                  required
-                  value={selectedQuizId}
-                  onChange={(e) => setSelectedQuizId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-xs text-white outline-none cursor-pointer"
-                >
-                  <option value="" className="bg-[#0b0e1b]">-- Choose a Quiz --</option>
-                  {myAvailableQuizzes.map((q) => (
-                    <option key={q.quizId} value={q.quizId} className="bg-[#0b0e1b]">
-                      {q.title} ({q.questions?.length ?? 0} Qs)
+                    <option value="" disabled>
+                      Choose a quiz...
                     </option>
-                  ))}
-                </select>
+                    {myAvailableQuizzes.map((q) => (
+                      <option key={q.quizId} value={q.quizId}>
+                        {q.title} ({q.questions?.length || 10} Qs)
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-on-surface-variant">
-                  Submission Due Date &amp; Time <span className="text-outline text-[11px]">(Optional)</span>
-                </label>
-                <input
-                  type="datetime-local"
-                  value={quizDueDate}
-                  onChange={(e) => setQuizDueDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-xs text-white outline-none"
-                />
-                <p className="text-[11px] text-on-surface-variant">
-                  Quizzes past the deadline switch to open practice mode and flag submissions.
-                </p>
+              {/* Assignment Protocol: Group Arena vs Standard Mission */}
+              <div className="p-3.5 rounded-xl bg-[#121626] border border-white/10 space-y-3">
+                <span className="block text-xs font-bold text-slate-200">
+                  Deployment Protocol:
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsArenaMode(true)}
+                    className={`p-3 rounded-xl border text-left transition flex flex-col gap-1 ${
+                      isArenaMode
+                        ? "bg-violet-600/20 border-violet-500/60 text-white shadow-md shadow-violet-600/20"
+                        : "bg-white/[0.02] border-white/10 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-violet-300">
+                      <Flame className="w-4 h-4 text-amber-400" />
+                      <span>Cohort Arena</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 leading-tight">
+                      Time-locked battle window. Live scoreboard visible to everyone.
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsArenaMode(false)}
+                    className={`p-3 rounded-xl border text-left transition flex flex-col gap-1 ${
+                      !isArenaMode
+                        ? "bg-violet-600/20 border-violet-500/60 text-white shadow-md shadow-violet-600/20"
+                        : "bg-white/[0.02] border-white/10 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-300">
+                      <Clock className="w-4 h-4 text-cyan-400" />
+                      <span>Open Mission</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 leading-tight">
+                      Flexible homework deadline. Cadets complete at their pace.
+                    </span>
+                  </button>
+                </div>
+
+                {isArenaMode ? (
+                  <div className="space-y-3 pt-2 border-t border-white/[0.08]">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                        Arena Start Time (Scheduled Window):
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={scheduledStartTime}
+                        onChange={(e) => setScheduledStartTime(e.target.value)}
+                        required={isArenaMode}
+                        className="w-full bg-[#0b0f19] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 transition"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                        Arena Duration Window:
+                      </label>
+                      <select
+                        value={arenaDurationMinutes}
+                        onChange={(e) => setArenaDurationMinutes(Number(e.target.value))}
+                        className="w-full bg-[#0b0f19] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 transition"
+                      >
+                        <option value={15}>15 Minutes</option>
+                        <option value={30}>30 Minutes</option>
+                        <option value={45}>45 Minutes</option>
+                        <option value={60}>60 Minutes (Standard)</option>
+                        <option value={90}>90 Minutes</option>
+                        <option value={120}>2 Hours</option>
+                        <option value={1440}>24 Hours</option>
+                      </select>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="pt-2 border-t border-white/[0.08]">
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                      Due Date (Optional):
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={assignmentDueDate}
+                      onChange={(e) => setAssignmentDueDate(e.target.value)}
+                      className="w-full bg-[#0b0f19] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500 transition"
+                    />
+                  </div>
+                )}
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-3">
+              {/* Submit Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setShowAssignQuizModal(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-medium text-on-surface-variant hover:text-white transition-colors cursor-pointer"
+                  onClick={() => setShowAssignModal(false)}
+                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-medium text-slate-300 transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={assigningQuiz || !selectedQuizId}
-                  className="px-5 py-2 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white font-semibold text-xs transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 text-xs font-semibold text-white shadow-lg shadow-violet-600/30 transition flex items-center gap-1.5"
                 >
                   {assigningQuiz ? (
                     <>
-                      <span className="material-symbols-outlined text-sm animate-spin">
-                        progress_activity
-                      </span>
-                      <span>Assigning...</span>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Deploying...</span>
                     </>
                   ) : (
                     <>
-                      <span>Assign to Cohort</span>
-                      <span className="material-symbols-outlined text-sm">check</span>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{isArenaMode ? "Launch Arena" : "Assign to Cohort"}</span>
                     </>
                   )}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: COHORT RESULTS & LEADERBOARD (VISIBLE TO ALL)     */}
+      {/* ========================================================= */}
+      {showResultsModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0b0f19] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="p-5 border-b border-white/[0.08] flex items-center justify-between bg-[#0e1424]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                  <Trophy className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    {resultsData?.quiz?.title || "Cohort Arena Results"}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Live Scoreboard & Cadet Rankings • Visible to All Cohort Members
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowResultsModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {loadingResults ? (
+                <div className="py-16 flex flex-col items-center justify-center text-center">
+                  <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mb-3" />
+                  <p className="text-xs text-slate-400">Compiling Cohort Telemetry & Scores...</p>
+                </div>
+              ) : resultsData ? (
+                <>
+                  {/* Top Stats Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3 rounded-xl bg-[#121626] border border-white/10 flex flex-col">
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase">
+                        Submissions
+                      </span>
+                      <span className="text-lg font-bold text-white mt-0.5">
+                        {resultsData.stats.totalAttempts} / {resultsData.stats.totalMembers}
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-[#121626] border border-white/10 flex flex-col">
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase">
+                        Cohort Avg Score
+                      </span>
+                      <span className="text-lg font-bold text-violet-400 mt-0.5">
+                        {resultsData.stats.avgScore} pts
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-[#121626] border border-white/10 flex flex-col">
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase">
+                        Cohort Accuracy
+                      </span>
+                      <span className="text-lg font-bold text-emerald-400 mt-0.5">
+                        {resultsData.stats.avgAccuracy}%
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-[#121626] border border-white/10 flex flex-col">
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase">
+                        Avg Time
+                      </span>
+                      <span className="text-lg font-bold text-cyan-400 mt-0.5">
+                        {Math.floor(resultsData.stats.avgTimeSeconds / 60)}m{" "}
+                        {resultsData.stats.avgTimeSeconds % 60}s
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Leaderboard Table */}
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-2">
+                      Ranked Scoreboard
+                    </h4>
+                    {resultsData.leaderboard.length === 0 ? (
+                      <div className="p-8 rounded-xl bg-white/[0.02] border border-white/10 text-center text-slate-400 text-xs">
+                        No submissions yet. Be the first cadet to complete this quiz!
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-white/10 overflow-hidden bg-[#121626]">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-[#0e1424] text-slate-400 text-[10px] uppercase font-semibold border-b border-white/10">
+                            <tr>
+                              <th className="px-3.5 py-2.5">Rank</th>
+                              <th className="px-3.5 py-2.5">Cadet</th>
+                              <th className="px-3.5 py-2.5 text-right">Score</th>
+                              <th className="px-3.5 py-2.5 text-right">Accuracy</th>
+                              <th className="px-3.5 py-2.5 text-right">Time Spent</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/[0.06]">
+                            {resultsData.leaderboard.map((entry) => {
+                              const isTop1 = entry.rank === 1;
+                              const isTop2 = entry.rank === 2;
+                              const isTop3 = entry.rank === 3;
+
+                              return (
+                                <tr
+                                  key={entry.userId}
+                                  className={`hover:bg-white/[0.03] transition ${
+                                    entry.userId === user?.userId ? "bg-violet-600/10" : ""
+                                  }`}
+                                >
+                                  {/* Rank */}
+                                  <td className="px-3.5 py-2.5 font-bold">
+                                    {isTop1 ? (
+                                      <span className="text-amber-400 flex items-center gap-1">
+                                        🥇 1
+                                      </span>
+                                    ) : isTop2 ? (
+                                      <span className="text-slate-300 flex items-center gap-1">
+                                        🥈 2
+                                      </span>
+                                    ) : isTop3 ? (
+                                      <span className="text-amber-600 flex items-center gap-1">
+                                        🥉 3
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400">#{entry.rank}</span>
+                                    )}
+                                  </td>
+
+                                  {/* Cadet Name */}
+                                  <td className="px-3.5 py-2.5">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-6 h-6 rounded-full bg-slate-800 text-[10px] font-bold text-slate-200 flex items-center justify-center">
+                                        {getInitials(entry.fullName || entry.username)}
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="font-semibold text-white">
+                                          {entry.fullName || entry.username}
+                                        </span>
+                                        {entry.userId === user?.userId && (
+                                          <span className="text-[9px] bg-violet-500/20 text-violet-300 px-1.5 py-0.2 rounded font-bold">
+                                            YOU
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* Score */}
+                                  <td className="px-3.5 py-2.5 text-right font-bold text-violet-300">
+                                    {entry.score} pts
+                                  </td>
+
+                                  {/* Accuracy */}
+                                  <td className="px-3.5 py-2.5 text-right font-semibold text-emerald-400">
+                                    {entry.accuracy}%
+                                  </td>
+
+                                  {/* Time */}
+                                  <td className="px-3.5 py-2.5 text-right text-slate-400 font-mono">
+                                    {Math.floor(entry.timeSpentSeconds / 60)}m{" "}
+                                    {entry.timeSpentSeconds % 60}s
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Awaiting Responses */}
+                  {resultsData.unattemptedMembers.length > 0 && (
+                    <div className="pt-2">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                        Awaiting Response ({resultsData.unattemptedMembers.length})
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {resultsData.unattemptedMembers.map((m) => (
+                          <div
+                            key={m.userId}
+                            className="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-[11px] text-slate-300 flex items-center gap-1.5"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                            <span>{m.fullName || m.username}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="p-8 text-center text-slate-400 text-xs">
+                  Failed to load cohort results.
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-white/[0.08] bg-[#0e1424] flex items-center justify-between">
+              <span className="text-[11px] text-slate-400">
+                Cohort results update live upon member completion
+              </span>
+              <button
+                onClick={() => setShowResultsModal(false)}
+                className="px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-medium text-white transition"
+              >
+                Close Scoreboard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL: INVITE CADETS                                      */}
+      {/* ========================================================= */}
+      {showInviteModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0b0f19] border border-white/10 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-white/[0.08] flex items-center justify-between bg-[#0e1424]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-cyan-600/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                  <Share2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Invite Cadets</h3>
+                  <p className="text-[11px] text-slate-400">Share cohort code or direct link</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowInviteModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Cohort Code Box */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Cohort Invite Code:
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 bg-[#121626] border border-white/10 rounded-xl px-4 py-2.5 font-mono text-base font-bold text-white tracking-widest text-center shadow-inner">
+                    {group.code}
+                  </div>
+                  <button
+                    onClick={handleCopyCode}
+                    className="px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-xs font-semibold text-white transition flex items-center gap-1.5"
+                  >
+                    {copiedCode ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    <span>{copiedCode ? "Copied" : "Copy"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Direct Link Box */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Direct Enrollment URL:
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={typeof window !== "undefined" ? `${window.location.origin}/groups?code=${group.code}` : ""}
+                    className="flex-1 bg-[#121626] border border-white/10 rounded-xl px-3 py-2 text-xs text-slate-300 font-mono truncate focus:outline-none"
+                  />
+                  <button
+                    onClick={handleCopyLink}
+                    className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-medium text-white transition flex items-center gap-1.5"
+                  >
+                    {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedLink ? "Copied" : "Copy"}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-white/[0.08] bg-[#0e1424] flex justify-end">
+              <button
+                onClick={() => setShowInviteModal(false)}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-medium text-white transition"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}

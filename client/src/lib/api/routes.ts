@@ -25,6 +25,8 @@ export const API_ROUTES = {
     resendPasswordResetOTP: `${API_BASE_URL}/auth/resend-password-reset-otp`, // POST
     verifyPasswordResetOTP: `${API_BASE_URL}/auth/verify-password-reset-otp`, // POST (sets RESET_PASS_TOKEN cookie)
     resetPassword: `${API_BASE_URL}/auth/reset-password`,          // POST (ResetPassGuard)
+    google: `${API_BASE_URL}/auth/google`,                          // GET (redirects to Google) | POST (verifies token)
+    googleCallback: `${API_BASE_URL}/auth/google/callback`,        // GET (Google OAuth redirect target)
     checkUsername: (username: string) =>
       `${API_BASE_URL}/auth/check-username?username=${encodeURIComponent(username)}`, // GET
   },
@@ -58,8 +60,17 @@ export const API_ROUTES = {
     updateAnswer: (sessionId: string) => `${API_BASE_URL}/api/quiz/attempt/answer/${sessionId}`,
     // POST: Finalize session responses & submit
     submitAttempt: (sessionId: string) => `${API_BASE_URL}/api/quiz/attempt/submit/${sessionId}`,
+    // POST: Log real-time anti-cheat violation / incident
+    logAntiCheat: (sessionId: string) => `${API_BASE_URL}/api/quiz/attempt/${sessionId}/anti-cheat-log`,
     // GET: Calculate final score for submitted session
     getScore: (sessionId: string) => `${API_BASE_URL}/api/quiz/score/${sessionId}`,
+    // GET: Attempt result, question breakdown, user accuracy and average time per question
+    attemptResult: (sessionId: string) => `${API_BASE_URL}/api/quiz/attempt/${sessionId}/result`,
+    // GET: Latest attempt result for current user
+    latestAttemptResult: (quizId?: string) =>
+      quizId
+        ? `${API_BASE_URL}/api/quiz/attempt/latest/${quizId}`
+        : `${API_BASE_URL}/api/quiz/attempt/latest`,
     // POST: Deploy quiz with protocol, access mode, and duration
     deploy: (quizId: string) => `${API_BASE_URL}/api/quiz/${quizId}/deploy`,
     // GET: Admin telemetry, attendees, average score, and live leaderboard
@@ -72,6 +83,8 @@ export const API_ROUTES = {
     public: (params?: string) => `${API_BASE_URL}/api/quiz/public${params ? `?${params}` : ''}`,
     // GET: Quiz review, analytics & leaderboard (no questions shown)
     review: (quizId: string) => `${API_BASE_URL}/api/quiz/${quizId}/review`,
+    // POST: Copy/clone quiz to public, organization, or private workspace
+    copy: (quizId: string) => `${API_BASE_URL}/api/quiz/${quizId}/copy`,
   },
 
   // ==========================================
@@ -160,6 +173,12 @@ export const API_ROUTES = {
       `${API_BASE_URL}/api/groups/${encodeURIComponent(groupId)}/messages/${encodeURIComponent(messageId)}/pin`,
     deleteMessage: (groupId: string, messageId: string) =>
       `${API_BASE_URL}/api/groups/${encodeURIComponent(groupId)}/messages/${encodeURIComponent(messageId)}`,
+    assignQuiz: (groupId: string) =>
+      `${API_BASE_URL}/api/groups/${encodeURIComponent(groupId)}/quizzes/assign`,
+    quizResults: (groupId: string, quizId: string) =>
+      `${API_BASE_URL}/api/groups/${encodeURIComponent(groupId)}/quizzes/${encodeURIComponent(quizId)}/results`,
+    unassignQuiz: (groupId: string, quizId: string) =>
+      `${API_BASE_URL}/api/groups/${encodeURIComponent(groupId)}/quizzes/${encodeURIComponent(quizId)}`,
   },
 
   // ==========================================

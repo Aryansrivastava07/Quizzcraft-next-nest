@@ -126,3 +126,29 @@ export class ResetPasswordAuthDto {
       @IsString()
       RESET_PASS_TOKEN?: string;
 }
+
+export class GoogleAuthDto {
+      @IsOptional()
+      @IsString()
+      credential?: string;
+
+      @IsOptional()
+      @IsString()
+      idToken?: string;
+
+      @IsOptional()
+      @IsString()
+      code?: string;
+
+      @IsOptional()
+      @IsString()
+      orgId?: string;
+
+      @IsOptional()
+      @IsString()
+      orgSlug?: string;
+
+      @IsOptional()
+      @IsString()
+      groupCode?: string;
+}

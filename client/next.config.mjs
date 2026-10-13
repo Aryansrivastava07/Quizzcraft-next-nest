@@ -50,6 +50,15 @@ const nextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: '/arena',
+        destination: '/join',
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

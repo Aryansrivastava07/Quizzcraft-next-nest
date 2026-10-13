@@ -133,6 +133,7 @@ export interface Quiz {
   dynamicShuffle?: boolean;
   temporalLimit?: boolean;
   questions: QuizQuestion[];
+  questionCount?: number;
   stats?: QuizStats;
   createdAt?: string;
 }
@@ -143,6 +144,8 @@ export interface GenerateQuizParams {
   difficulty?: string;
   quizType?: string;
   sourceUrl?: string;
+  orgId?: string;
+  isPractice?: boolean;
   images?: File[];
   videos?: File[];
   pdfs?: File[];
@@ -164,6 +167,16 @@ export interface AttemptSession {
 export interface AnswerQuizDto {
   questionId: string;
   option: string;
+  timeSpentSeconds?: number;
+  totalTimeSpentSeconds?: number;
+  tabSwitchesCount?: number;
+  copyAttemptsCount?: number;
+  fullscreenExitsCount?: number;
+  antiCheatLogs?: Array<{
+    eventType: string;
+    timestamp: string;
+    details?: string;
+  }>;
 }
 
 // ==================== PROFILE & SETTINGS TYPES ====================
@@ -239,6 +252,7 @@ export interface PublicQuizItem {
   attemptsCount: number;
   questime?: number;
   createdAt?: string;
+  antiCheat?: boolean;
   creator: {
     username: string;
     fullName: string;
@@ -264,6 +278,14 @@ export interface LeaderboardEntry {
   percentage: number;
   isActive: boolean;
   lastUpdateAt: string;
+  tabSwitchesCount?: number;
+  copyAttemptsCount?: number;
+  fullscreenExitsCount?: number;
+  antiCheatLogs?: Array<{
+    eventType: string;
+    timestamp: string;
+    details?: string;
+  }>;
 }
 
 export interface QuizReviewStats {
@@ -274,6 +296,73 @@ export interface QuizReviewStats {
   highestScore: number;
   lowestScore: number;
   passRate: number;
+  averageTimeSeconds?: number;
+  averageTimePerQuestion?: number;
+  totalCorrectAnswers?: number;
+  totalIncorrectAnswers?: number;
+  overallCorrectRate?: number;
+  overallIncorrectRate?: number;
+}
+
+export interface AttemptResultQuestion {
+  id: number;
+  questionId: string;
+  question: string;
+  options: string[];
+  userAnswer: string | null;
+  correctAnswer: string;
+  isCorrect: boolean;
+  explanation?: string;
+  level?: string;
+  xp?: number;
+  timeSpentSeconds?: number;
+  reference?: QuizQuestionReference;
+}
+
+export interface AttemptResultData {
+  attempt: {
+    sessionId: string;
+    quizId: string;
+    score: number;
+    totalQuestions: number;
+    accuracy: number;
+    correctCount: number;
+    incorrectCount: number;
+    unansweredCount: number;
+    totalTimeSpentSeconds: number;
+    averageTimePerQuestion: number;
+    rank: number;
+    totalParticipants: number;
+    percentile: number;
+    grade: string;
+    user: {
+      username: string;
+      fullName: string;
+      avatar?: string;
+    };
+  };
+  quiz: {
+    quizId: string;
+    title: string;
+    coverImage?: string;
+    pin?: string;
+    questime?: number;
+    totalQuestions: number;
+  };
+  questions: AttemptResultQuestion[];
+  leaderboard: Array<{
+    rank: number;
+    sessionId: string;
+    userId: string;
+    username: string;
+    fullName: string;
+    avatar?: string;
+    score: number;
+    percentage: number;
+    totalTimeSpentSeconds?: number;
+    avgResponseTime?: number;
+    isCurrentUser: boolean;
+  }>;
 }
 
 export interface QuizReviewData {
@@ -428,6 +517,57 @@ export interface GradebookEntry {
 export interface GroupGradebookResponse {
   quizzes: { quizId: string; title: string; totalQuestions: number; dueDate?: string }[];
   students: GradebookEntry[];
+}
+
+export interface CohortLeaderboardEntry {
+  rank: number;
+  userId: string;
+  username: string;
+  fullName: string;
+  profilePicture?: string;
+  score: number;
+  accuracy: number;
+  timeSpentSeconds: number;
+  submittedAt?: string | null;
+  isCreator: boolean;
+}
+
+export interface CohortQuizResultsResponse {
+  quiz: {
+    quizId: string;
+    title: string;
+    pin?: string;
+    totalQuestions: number;
+    deploymentType?: string;
+    status?: string;
+    scheduledFor?: string;
+    liveUntil?: string;
+    dueDate?: string;
+  };
+  leaderboard: CohortLeaderboardEntry[];
+  unattemptedMembers: {
+    userId: string;
+    username: string;
+    fullName: string;
+    profilePicture?: string;
+    isCreator: boolean;
+    hasAttempted: boolean;
+  }[];
+  stats: {
+    totalMembers: number;
+    totalAttempts: number;
+    avgScore: number;
+    avgAccuracy: number;
+    avgTimeSeconds: number;
+  };
+}
+
+export interface AssignCohortQuizDto {
+  quizId: string;
+  isArena?: boolean;
+  scheduledFor?: string;
+  durationMinutes?: number;
+  dueDate?: string;
 }
 
 // ==================== NOTIFICATION TYPES ====================

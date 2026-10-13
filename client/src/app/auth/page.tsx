@@ -19,8 +19,16 @@ function AuthContent() {
   const redirectUrl = searchParams.get("redirect") || (urlOrg ? `/${encodeURIComponent(urlOrg)}` : "/profile");
   const urlMode = searchParams.get("mode");
   const urlEmail = searchParams.get("email");
+  const urlError = searchParams.get("error");
 
   const { user, login, register, verifyRegisterOTP } = useAuth();
+
+  // If redirected with an OAuth error, show it immediately
+  useEffect(() => {
+    if (urlError) {
+      setAuthError(decodeURIComponent(urlError));
+    }
+  }, [urlError]);
 
   // If user is already authenticated and visits /auth?org=..., redirect immediately to the org workspace
   useEffect(() => {
@@ -324,6 +332,17 @@ function AuthContent() {
     }
   };
 
+  const handleGoogleSignIn = () => {
+    setIsLoading(true);
+    setAuthError(null);
+    const params = new URLSearchParams();
+    if (redirectUrl) params.set("redirect", redirectUrl);
+    if (urlOrg) params.set("org", urlOrg);
+    if (urlGroup) params.set("group", urlGroup);
+
+    window.location.href = `/auth/google${params.toString() ? `?${params.toString()}` : ""}`;
+  };
+
   return (
     <div className="bg-surface text-on-surface font-body-md text-body-md min-h-screen md:h-screen w-full relative flex flex-col md:flex-row overflow-x-hidden md:overflow-hidden selection:bg-primary-container selection:text-on-primary-container">
       {/* Stitch Cosmic Void Canvas with Interactive Cursor Physics */}
@@ -512,30 +531,29 @@ function AuthContent() {
               {/* Google Button */}
               <button
                 type="button"
-                onClick={() => {
-                  setAuthError("OAuth sign-in (Google) is missing in the backend. Please authenticate with your email & password.");
-                }}
-                className="w-full flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-white/20 transition-all text-on-surface text-xs font-medium active:scale-[0.98] cursor-pointer shadow-sm group"
+                onClick={handleGoogleSignIn}
+                disabled={isLoading}
+                className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] active:scale-[0.99] transition-all text-xs font-semibold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed group cursor-pointer"
               >
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-105" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" viewBox="0 0 24 24">
                   <path
-                    d="M12 5c1.54 0 2.93.56 4.02 1.48l3.01-3.01C17.21 1.76 14.77 1 12 1 7.42 1 3.55 3.63 1.64 7.45l3.69 2.87C6.22 7.37 8.87 5 12 5z"
-                    fill="#EA4335"
-                  />
-                  <path
-                    d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.28 1.48-1.12 2.73-2.39 3.58l3.68 2.86c2.15-1.99 3.43-4.91 3.43-8.68z"
                     fill="#4285F4"
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                   />
                   <path
-                    d="M5.33 14.68A6.98 6.98 0 0 1 4.98 12c0-.94.13-1.85.35-2.68L1.64 6.45A11.96 11.96 0 0 0 .5 12c0 1.92.46 3.73 1.14 5.35l3.69-2.67z"
-                    fill="#FBBC05"
-                  />
-                  <path
-                    d="M12 23c3.24 0 5.95-1.08 7.93-2.91l-3.68-2.86c-1.07.72-2.45 1.16-4.25 1.16-3.13 0-5.78-2.37-6.67-5.32L1.64 15.68C3.55 19.5 7.42 22.13 12 22.13z"
                     fill="#34A853"
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                   />
                 </svg>
-                <span className="font-medium text-xs">Continue with Google</span>
+                <span>Continue with Google</span>
               </button>
 
               {/* Divider */}

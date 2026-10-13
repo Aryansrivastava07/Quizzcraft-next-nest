@@ -40,8 +40,11 @@ export class User {
   @Prop({ type: [String], default: [] })
   emails!: string[];
 
-  @Prop()
+  @Prop({ default: '' })
   password!: string;
+
+  @Prop({ type: String, default: null, sparse: true, index: true })
+  googleId?: string | null;
 
   @Prop({ default: false })
   verified!: boolean;

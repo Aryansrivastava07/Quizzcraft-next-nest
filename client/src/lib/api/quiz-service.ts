@@ -7,6 +7,7 @@ import {
   AnswerQuizDto,
   PublicQuizzesResponse,
   QuizReviewData,
+  AttemptResultData,
 } from "./types";
 
 export const quizService = {
@@ -29,6 +30,12 @@ export const quizService = {
     }
     if (params.sourceUrl) {
       formData.append("sourceUrl", params.sourceUrl);
+    }
+    if (params.orgId) {
+      formData.append("orgId", params.orgId);
+    }
+    if (params.isPractice !== undefined) {
+      formData.append("isPractice", String(params.isPractice));
     }
 
     if (params.images && params.images.length > 0) {
@@ -198,13 +205,35 @@ export const quizService = {
 
   /**
    * Finalize and submit all responses for a quiz session
-   * Closes session and records attempt
+   * Closes session and records attempt with timing telemetry
    */
-  async submitAttempt(sessionId: string, finalAnswer: AnswerQuizDto) {
-    return apiClient<boolean>(API_ROUTES.quiz.submitAttempt(sessionId), {
-      method: "POST",
-      body: JSON.stringify(finalAnswer),
-    });
+  async submitAttempt(
+    sessionId: string,
+    finalAnswer: AnswerQuizDto & { timeSpentSeconds?: number; totalTimeSpentSeconds?: number }
+  ) {
+    return apiClient<{ score: number; accuracy: number; totalTimeSpentSeconds: number } | boolean>(
+      API_ROUTES.quiz.submitAttempt(sessionId),
+      {
+        method: "POST",
+        body: JSON.stringify(finalAnswer),
+      }
+    );
+  },
+
+  /**
+   * Log an anti-cheat incident / violation in real-time
+   */
+  async logAntiCheatEvent(
+    sessionId: string,
+    payload: { eventType: string; details?: string; timestamp?: string }
+  ) {
+    return apiClient<{ message: string; data: boolean }>(
+      API_ROUTES.quiz.logAntiCheat(sessionId),
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }
+    );
   },
 
   /**
@@ -213,6 +242,25 @@ export const quizService = {
    */
   async getScore(sessionId: string) {
     return apiClient<number>(API_ROUTES.quiz.getScore(sessionId), {
+      method: "GET",
+    });
+  },
+
+  /**
+   * Fetch detailed attempt result for a completed session
+   * Includes accuracy, average time per question, correct vs incorrect, question solutions & leaderboard
+   */
+  async getAttemptResult(sessionId: string) {
+    return apiClient<AttemptResultData>(API_ROUTES.quiz.attemptResult(sessionId), {
+      method: "GET",
+    });
+  },
+
+  /**
+   * Fetch latest completed attempt result for the user (optionally scoped to a quiz)
+   */
+  async getLatestAttemptResult(quizId?: string) {
+    return apiClient<AttemptResultData>(API_ROUTES.quiz.latestAttemptResult(quizId), {
       method: "GET",
     });
   },
@@ -339,6 +387,24 @@ export const quizService = {
   async getQuizReview(quizId: string) {
     return apiClient<QuizReviewData>(API_ROUTES.quiz.review(quizId), {
       method: "GET",
+    });
+  },
+
+  /**
+   * Create a duplicate copy of a quiz in a destination workspace
+   * (PUBLIC, ORGANIZATION, or PRIVATE)
+   */
+  async copyQuiz(
+    quizId: string,
+    payload: {
+      targetWorkspace: "PUBLIC" | "ORGANIZATION" | "PRIVATE";
+      title?: string;
+      orgId?: string;
+    }
+  ) {
+    return apiClient<{ quiz: Quiz }>(API_ROUTES.quiz.copy(quizId), {
+      method: "POST",
+      body: JSON.stringify(payload),
     });
   },
 };

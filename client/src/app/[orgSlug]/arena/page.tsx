@@ -54,7 +54,7 @@ function OrgArenaContent({
   const handleJoinByPin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!pin.trim()) return;
-    router.push(`/quiz?pin=${encodeURIComponent(pin.trim())}`);
+    router.push(`/join?pin=${encodeURIComponent(pin.trim())}`);
   };
 
   return (
@@ -137,7 +137,7 @@ function OrgArenaContent({
                   </div>
 
                   <Link
-                    href={`/quiz?quizId=${encodeURIComponent(quiz.quizId)}`}
+                    href={quiz.pin ? `/join?pin=${encodeURIComponent(quiz.pin)}` : `/quiz?quizId=${encodeURIComponent(quiz.quizId)}`}
                     className="px-4 py-2 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white text-xs font-semibold shadow-md shadow-primary-container/25 border border-white/10 transition-all shrink-0 active:scale-95 cursor-pointer"
                   >
                     Join Room

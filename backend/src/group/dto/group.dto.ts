@@ -57,3 +57,24 @@ export class PostGroupMessageDto {
     questionText: string;
   };
 }
+
+export class AssignGroupQuizDto {
+  @IsString()
+  @IsNotEmpty()
+  quizId!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isArena?: boolean;
+
+  @IsOptional()
+  @IsString()
+  scheduledFor?: string;
+
+  @IsOptional()
+  durationMinutes?: number;
+
+  @IsOptional()
+  @IsString()
+  dueDate?: string;
+}

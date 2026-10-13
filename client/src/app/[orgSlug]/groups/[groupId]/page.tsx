@@ -7,6 +7,7 @@ import Navbar from "@/components/layout/Navbar";
 import OrgWorkspaceGuard from "@/components/org/OrgWorkspaceGuard";
 import { groupService } from "@/lib/api/group-service";
 import { quizService } from "@/lib/api/quiz-service";
+import { useCohortSocket } from "@/lib/hooks/useCohortSocket";
 import { useAuth } from "@/lib/auth/auth-context";
 import {
   Group,
@@ -44,7 +45,13 @@ export default function GroupWorkspacePage() {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [questionContext, setQuestionContext] = useState<GroupQuestionContext | null>(null);
   const [showQuestionSelector, setShowQuestionSelector] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const activeTabRef = useRef<GroupTab>("quizzes");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
 
   // Assign Quiz Modal state
   const [showAssignQuizModal, setShowAssignQuizModal] = useState(false);
@@ -58,33 +65,56 @@ export default function GroupWorkspacePage() {
   const [requireApproval, setRequireApproval] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
+  const [serverIsMember, setServerIsMember] = useState(false);
+  const [serverIsCreator, setServerIsCreator] = useState(false);
+
+  const isCreator =
+    serverIsCreator ||
+    Boolean(user?.userId && group?.creatorId && user.userId === group.creatorId) ||
+    Boolean(user?.username && group?.creator?.username && user.username.toLowerCase() === group.creator.username.toLowerCase());
+
+  const isMember =
+    serverIsMember ||
+    isCreator ||
+    Boolean(user?.userId && group?.memberIds?.includes(user.userId)) ||
+    Boolean(user?.userId && members.some((m) => m.userId === user.userId)) ||
+    Boolean(user?.username && members.some((m) => m.username?.toLowerCase() === user.username.toLowerCase()));
+
   const isCreatorOrAdmin =
-    user?.userId === group?.creatorId ||
+    isCreator ||
     user?.role === "ORG_ADMIN" ||
     user?.role === "SUPER_ADMIN" ||
     Boolean(user?.isSuperAdmin);
 
+  // ==================== REAL-TIME WEBSOCKET INTEGRATION ====================
+  const { isConnected, activeCadetsCount, typingUsers, sendTyping } = useCohortSocket({
+    groupId,
+    userId: user?.userId,
+    username: user?.username || user?.fullName,
+    onNewMessage: (newMsg) => {
+      setMessages((prev) => {
+        if (prev.some((m) => m.messageId === newMsg.messageId)) return prev;
+        return [...prev, newMsg];
+      });
+      if (activeTabRef.current !== "discussion") {
+        setUnreadCount((prev) => prev + 1);
+      }
+    },
+    onMessagePinned: (messageId, isPinned) => {
+      setMessages((prev) =>
+        prev.map((m) => (m.messageId === messageId ? { ...m, isPinned } : m))
+      );
+    },
+    onMessageDeleted: (messageId) => {
+      setMessages((prev) => prev.filter((m) => m.messageId !== messageId));
+    },
+  });
+
   useEffect(() => {
-    if (!authLoading && user && groupId) {
+    if (!authLoading && user?.userId && groupId) {
       loadGroupWorkspace();
     }
-  }, [authLoading, user, groupId]);
-
-  // Polling for discussion messages every 6 seconds when on discussion tab
-  useEffect(() => {
-    if (activeTab !== "discussion" || !groupId) return;
-    const interval = setInterval(async () => {
-      try {
-        const res = await groupService.getGroupMessages(groupId);
-        if (res?.data?.messages) {
-          setMessages(res.data.messages);
-        }
-      } catch (err) {
-        // Silent poll error
-      }
-    }, 6000);
-    return () => clearInterval(interval);
-  }, [activeTab, groupId]);
+  }, [authLoading, user?.userId, groupId]);
 
   const loadGroupWorkspace = async () => {
     setIsLoading(true);
@@ -102,6 +132,8 @@ export default function GroupWorkspacePage() {
         setPendingMembers(groupRes.data.pendingMembers || []);
         setIsLocked(groupRes.data.group.isLocked);
         setRequireApproval(groupRes.data.group.requireApproval);
+        if (groupRes.data.isMember !== undefined) setServerIsMember(Boolean(groupRes.data.isMember));
+        if (groupRes.data.isCreator !== undefined) setServerIsCreator(Boolean(groupRes.data.isCreator));
       }
       if (quizzesRes?.data?.quizzes) {
         setQuizzes(quizzesRes.data.quizzes);
@@ -131,8 +163,8 @@ export default function GroupWorkspacePage() {
     }
   }, [messages, activeTab]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!messageText.trim() && !questionContext) return;
     setSendingMessage(true);
     try {
@@ -142,7 +174,11 @@ export default function GroupWorkspacePage() {
       });
 
       if (res?.data) {
-        setMessages((prev) => [...prev, res.data]);
+        const msg = (res.data as any).message || res.data;
+        setMessages((prev) => {
+          if (prev.some((m) => m.messageId === msg.messageId)) return prev;
+          return [...prev, msg];
+        });
         setMessageText("");
         setQuestionContext(null);
       }
@@ -156,9 +192,10 @@ export default function GroupWorkspacePage() {
   const handlePinMessage = async (messageId: string) => {
     try {
       const res = await groupService.pinGroupMessage(groupId, messageId);
-      if (res?.data?.message) {
+      if (res?.data) {
+        const isPinned = Boolean((res.data as any).isPinned ?? (res.data as any).message?.isPinned);
         setMessages((prev) =>
-          prev.map((m) => (m.messageId === messageId ? res.data.message : m))
+          prev.map((m) => (m.messageId === messageId ? { ...m, isPinned } : m))
         );
       }
     } catch (err: any) {
@@ -293,7 +330,7 @@ export default function GroupWorkspacePage() {
   const handleCopyInviteLink = () => {
     if (typeof window === "undefined" || !group) return;
     const origin = window.location.origin;
-    const link = `${origin}/auth?code=${group.code}`;
+    const link = `${origin}/${encodeURIComponent(orgSlug)}/groups?code=${group.code}`;
     navigator.clipboard.writeText(link);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
@@ -436,7 +473,10 @@ export default function GroupWorkspacePage() {
             </button>
 
             <button
-              onClick={() => setActiveTab("discussion")}
+              onClick={() => {
+                setActiveTab("discussion");
+                setUnreadCount(0);
+              }}
               className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
                 activeTab === "discussion"
                   ? "bg-primary-container text-white shadow-md shadow-primary-container/20 border border-white/10"
@@ -445,9 +485,9 @@ export default function GroupWorkspacePage() {
             >
               <span className="material-symbols-outlined text-sm">forum</span>
               <span>Discussion Room</span>
-              {messages.length > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-white/20 text-[10px]">
-                  {messages.length}
+              {unreadCount > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-primary text-black font-bold text-[10px] animate-pulse">
+                  {unreadCount} new
                 </span>
               )}
             </button>
@@ -626,7 +666,10 @@ export default function GroupWorkspacePage() {
                 </div>
               ) : (
                 unpinnedMessages.map((msg) => {
-                  const isMine = msg.senderId === user?.userId;
+                  const authorId = msg.authorId || msg.senderId;
+                  const isMine = authorId === user?.userId;
+                  const authorName = msg.authorName || msg.senderName || "Cadet Pilot";
+                  const authorRole = msg.authorRole || msg.senderRole;
                   return (
                     <div
                       key={msg.messageId}
@@ -634,23 +677,35 @@ export default function GroupWorkspacePage() {
                     >
                       <div className="flex items-center gap-2 mb-1 text-[11px]">
                         <span className="font-semibold text-white">
-                          {isMine ? "You" : msg.senderName}
+                          {isMine ? "You" : authorName}
                         </span>
-                        {msg.senderRole && (
-                          <span
-                            className={`px-1.5 py-0.2 rounded text-[9px] uppercase font-mono font-bold ${
-                              msg.senderRole === "SUPER_ADMIN"
-                                ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                                : msg.senderRole === "ORG_ADMIN"
-                                ? "bg-primary/20 text-primary border border-primary/30"
-                                : msg.senderRole === "ORG_PARTNER"
-                                ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
-                                : "bg-white/10 text-on-surface-variant border border-white/10"
-                            }`}
-                          >
-                            {msg.senderRole}
-                          </span>
-                        )}
+                        {(() => {
+                          const isInstructor =
+                            authorId === group?.creatorId ||
+                            (group?.creator?.username && authorName.toLowerCase() === group.creator.username.toLowerCase());
+                          if (isInstructor) {
+                            return (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] uppercase font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                Instructor
+                              </span>
+                            );
+                          }
+                          if (authorRole === "SUPER_ADMIN" || authorRole === "ORG_ADMIN") {
+                            return (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] uppercase font-mono font-bold bg-primary/20 text-primary border border-primary/30">
+                                Admin
+                              </span>
+                            );
+                          }
+                          if (authorRole === "ORG_PARTNER") {
+                            return (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] uppercase font-mono font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                                Partner
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
                         <span className="text-outline text-[10px]">
                           {new Date(msg.createdAt).toLocaleTimeString([], {
                             hour: "2-digit",

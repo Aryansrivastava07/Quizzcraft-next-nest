@@ -5,8 +5,8 @@ export default function Footer() {
     { label: "Create Quiz", href: "/create" },
     { label: "Review & Editor", href: "/editor" },
     { label: "Deploy Hub", href: "/deploy" },
-    { label: "Join Arena", href: "/join" },
-    { label: "Active Quiz", href: "/quiz" },
+    { label: "Live Arena", href: "/join" },
+    { label: "Explore Arenas", href: "/quizzes" },
     { label: "Leaderboard", href: "/results" },
     { label: "Sign In", href: "/auth" },
   ];

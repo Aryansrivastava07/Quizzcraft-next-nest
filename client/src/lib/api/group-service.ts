@@ -8,6 +8,8 @@ import {
   GroupGradebookResponse,
   Quiz,
   OrgMember,
+  CohortQuizResultsResponse,
+  AssignCohortQuizDto,
 } from "./types";
 
 export const groupService = {
@@ -172,6 +174,40 @@ export const groupService = {
   async deleteGroupMessage(groupId: string, messageId: string) {
     return apiClient<{ deleted: boolean }>(
       API_ROUTES.group.deleteMessage(groupId, messageId),
+      {
+        method: "DELETE",
+      }
+    );
+  },
+
+  /**
+   * Assign an existing quiz to the cohort (with optional Arena live scheduling)
+   */
+  async assignQuiz(groupId: string, data: AssignCohortQuizDto) {
+    return apiClient<{ quiz: Quiz }>(API_ROUTES.group.assignQuiz(groupId), {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  /**
+   * Get cohort quiz results & leaderboard (visible to all cohort members)
+   */
+  async getQuizResults(groupId: string, quizId: string) {
+    return apiClient<CohortQuizResultsResponse>(
+      API_ROUTES.group.quizResults(groupId, quizId),
+      {
+        method: "GET",
+      }
+    );
+  },
+
+  /**
+   * Remove an assigned quiz from the cohort (Instructor only)
+   */
+  async unassignQuiz(groupId: string, quizId: string) {
+    return apiClient<{ quizId: string }>(
+      API_ROUTES.group.unassignQuiz(groupId, quizId),
       {
         method: "DELETE",
       }

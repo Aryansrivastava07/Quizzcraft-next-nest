@@ -19,7 +19,10 @@ import {
   SendPasswordResetMailAuthDto,
   ResetPasswordAuthDto,
   ResendOTP,
+  GoogleAuthDto,
 } from './dto/auth.request.dto';
+import { OAuth2Client } from 'google-auth-library';
+import crypto from 'crypto';
 import { Model } from 'mongoose';
 import { User } from '../schemas/user.schema';
 import { comparePassword, hashPassword } from '../common/utils/hash.util';
@@ -536,5 +539,309 @@ export class AuthService implements OnModuleInit {
       message: 'Password reset successful',
       data: { reset: true },
     };
+  }
+
+  private getGoogleOAuth2Client(customCallbackUrl?: string): OAuth2Client {
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    const clientSecret = this.configService.get<string>('GOOGLE_CLIENT_SECRET');
+
+    if (!clientId || !clientSecret) {
+      throw new BadRequestException(
+        'Google OAuth is not configured on the server. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in backend .env',
+      );
+    }
+
+    const callbackUrl =
+      this.configService.get<string>('GOOGLE_CALLBACK_URL') ||
+      customCallbackUrl ||
+      'http://localhost:5000/auth/google/callback';
+
+    return new OAuth2Client(clientId, clientSecret, callbackUrl);
+  }
+
+  getGoogleAuthUrl(
+    params: { redirect?: string; org?: string; group?: string },
+    reqCallbackUrl?: string,
+  ): string {
+    const client = this.getGoogleOAuth2Client(reqCallbackUrl);
+    const state = Buffer.from(JSON.stringify(params || {})).toString('base64url');
+
+    return client.generateAuthUrl({
+      access_type: 'offline',
+      scope: [
+        'https://www.googleapis.com/auth/userinfo.profile',
+        'https://www.googleapis.com/auth/userinfo.email',
+        'openid',
+      ],
+      prompt: 'select_account',
+      state,
+    });
+  }
+
+  async handleGoogleCallback(
+    code: string,
+    state?: string,
+    reqCallbackUrl?: string,
+  ): Promise<{
+    user: User;
+    accessToken: string;
+    refreshToken: string;
+    redirect: string;
+  }> {
+    if (!code) {
+      throw new BadRequestException('Authorization code from Google is missing');
+    }
+
+    let stateData: { redirect?: string; org?: string; group?: string } = {};
+    if (state) {
+      try {
+        stateData = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
+      } catch {
+        // Silently fallback to empty state
+      }
+    }
+
+    const client = this.getGoogleOAuth2Client(reqCallbackUrl);
+    const { tokens } = await client.getToken(code);
+    client.setCredentials(tokens);
+
+    if (!tokens.id_token) {
+      throw new UnauthorizedException('Google failed to provide an ID token');
+    }
+
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    const ticket = await client.verifyIdToken({
+      idToken: tokens.id_token,
+      audience: clientId,
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      throw new UnauthorizedException('Failed to retrieve verified email from Google');
+    }
+
+    const result = await this.validateOrCreateGoogleUser({
+      googleId: payload.sub,
+      email: payload.email,
+      name: payload.name,
+      picture: payload.picture,
+      orgId: stateData.org,
+      orgSlug: stateData.org,
+      groupCode: stateData.group,
+    });
+
+    return {
+      ...result,
+      redirect: stateData.redirect || '/profile',
+    };
+  }
+
+  async handleGoogleTokenLogin(
+    dto: GoogleAuthDto,
+  ): Promise<ServiceResponse<LoginResponseData>> {
+    const tokenToVerify = dto.idToken || dto.credential;
+    if (!tokenToVerify) {
+      throw new BadRequestException('No Google idToken or credential provided');
+    }
+
+    const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    const client = this.getGoogleOAuth2Client();
+
+    const ticket = await client.verifyIdToken({
+      idToken: tokenToVerify,
+      audience: clientId,
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      throw new UnauthorizedException('Failed to retrieve verified email from Google');
+    }
+
+    const { user, accessToken, refreshToken } = await this.validateOrCreateGoogleUser({
+      googleId: payload.sub,
+      email: payload.email,
+      name: payload.name,
+      picture: payload.picture,
+      orgId: dto.orgId,
+      orgSlug: dto.orgSlug,
+      groupCode: dto.groupCode,
+    });
+
+    return {
+      message: 'Google authentication successful',
+      data: {
+        user: toLoginDto(user),
+        accessToken,
+        refreshToken,
+      },
+    };
+  }
+
+  private async validateOrCreateGoogleUser(profile: {
+    googleId: string;
+    email: string;
+    name?: string;
+    picture?: string;
+    orgId?: string;
+    orgSlug?: string;
+    groupCode?: string;
+  }): Promise<{ user: User; accessToken: string; refreshToken: string }> {
+    const normalizedEmail = (profile.email || '').toLowerCase().trim();
+
+    let user = await this.UserModel.findOne({
+      $or: [
+        { googleId: profile.googleId },
+        { email: normalizedEmail },
+        { emails: normalizedEmail },
+      ],
+    });
+
+    if (user) {
+      // Existing user update
+      if (!user.googleId) {
+        user.googleId = profile.googleId;
+      }
+      user.verified = true;
+      if (!user.profilePicture && profile.picture) {
+        user.profilePicture = profile.picture;
+      }
+      if (!user.fullName && profile.name) {
+        user.fullName = profile.name;
+      }
+      if (!user.emails || user.emails.length === 0) {
+        user.emails = [user.email];
+      }
+      if (!user.emails.includes(normalizedEmail)) {
+        user.emails.push(normalizedEmail);
+      }
+
+      // Check organization auto-enrollment
+      const targetOrgIdentifier = (profile.orgSlug || profile.orgId || '').toLowerCase().trim();
+      if (targetOrgIdentifier && (!user.orgId || user.role === 'PUBLIC_USER')) {
+        const targetOrg = await this.OrgModel.findOne({
+          $or: [{ slug: targetOrgIdentifier }, { orgId: targetOrgIdentifier }],
+        });
+        if (targetOrg && targetOrg.status === 'ACTIVE') {
+          const memberCount = await this.UserModel.countDocuments({ orgId: targetOrg.orgId });
+          const seatsAvailable = memberCount < targetOrg.maxSeats;
+
+          let domainMatches = true;
+          if (targetOrg.allowedEmailDomain) {
+            const domain = targetOrg.allowedEmailDomain.toLowerCase().replace(/^@/, '').trim();
+            const allUserEmails = [user.email, ...(user.emails || [])].map((e) => e.toLowerCase().trim());
+            domainMatches = allUserEmails.some((e) => e.endsWith(`@${domain}`));
+          }
+
+          if (seatsAvailable && domainMatches) {
+            user.orgId = targetOrg.orgId;
+            user.orgSlug = targetOrg.slug;
+            user.role = 'ORG_STD';
+            user.institution = targetOrg.name;
+          }
+        }
+      }
+
+      // Check group auto-enrollment
+      if (profile.groupCode) {
+        const group = await this.GroupModel.findOne({ code: profile.groupCode.trim().toUpperCase() });
+        if (group && !group.isLocked && !group.requireApproval) {
+          if (!user.groupIds) user.groupIds = [];
+          if (!user.groupIds.includes(group.groupId)) {
+            user.groupIds.push(group.groupId);
+            await this.GroupModel.updateOne(
+              { code: profile.groupCode.trim().toUpperCase() },
+              { $addToSet: { memberIds: String(user._id) } },
+            );
+          }
+        }
+      }
+    } else {
+      // New user registration via Google
+      let baseUsername = (profile.name || normalizedEmail.split('@')[0] || 'cadet')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
+        .slice(0, 20);
+      if (baseUsername.length < 3) baseUsername = 'cadet';
+
+      let uniqueUsername = baseUsername;
+      let attempts = 0;
+      while (attempts < 10) {
+        const existing = await this.UserModel.findOne({ username: uniqueUsername });
+        if (!existing) break;
+        uniqueUsername = `${baseUsername.slice(0, 16)}${Math.floor(1000 + Math.random() * 9000)}`;
+        attempts++;
+      }
+
+      let resolvedOrgId: string | null = null;
+      let resolvedOrgSlug: string | null = null;
+      let resolvedInstitution = '';
+      let initialRole: 'PUBLIC_USER' | 'ORG_STD' = 'PUBLIC_USER';
+      const initialGroupIds: string[] = [];
+
+      if (profile.orgId || profile.orgSlug) {
+        const orgQuery = (profile.orgSlug || profile.orgId)!.trim();
+        const org = await this.OrgModel.findOne({
+          $or: [{ orgId: orgQuery }, { slug: orgQuery.toLowerCase() }],
+        });
+        if (org && org.status === 'ACTIVE') {
+          resolvedOrgId = org.orgId;
+          resolvedOrgSlug = org.slug;
+          resolvedInstitution = org.name;
+          initialRole = 'ORG_STD';
+        }
+      }
+
+      if (profile.groupCode) {
+        const codeQuery = profile.groupCode.trim().toUpperCase();
+        const group = await this.GroupModel.findOne({ code: codeQuery });
+        if (group) {
+          if (!resolvedOrgId) {
+            resolvedOrgId = group.orgId;
+            const parentOrg = await this.OrgModel.findOne({ orgId: group.orgId });
+            if (parentOrg) {
+              resolvedOrgSlug = parentOrg.slug;
+              resolvedInstitution = parentOrg.name;
+            }
+            initialRole = 'ORG_STD';
+          }
+          if (!group.isLocked && !group.requireApproval) {
+            initialGroupIds.push(group.groupId);
+          }
+        }
+      }
+
+      const randomPassword = await hashPassword(crypto.randomUUID(), this.getSalt());
+
+      user = await this.UserModel.create({
+        username: uniqueUsername,
+        email: normalizedEmail,
+        emails: [normalizedEmail],
+        fullName: profile.name?.trim() || '',
+        profilePicture: profile.picture || '',
+        googleId: profile.googleId,
+        verified: true,
+        password: randomPassword,
+        role: initialRole,
+        orgId: resolvedOrgId,
+        orgSlug: resolvedOrgSlug,
+        institution: resolvedInstitution,
+        groupIds: initialGroupIds,
+      });
+
+      if (initialGroupIds.length > 0 && profile.groupCode) {
+        await this.GroupModel.updateOne(
+          { code: profile.groupCode.trim().toUpperCase() },
+          { $addToSet: { memberIds: String(user._id) } },
+        );
+      }
+    }
+
+    const { accessToken, refreshToken, hashedRefreshToken } =
+      await this.generateAuthTokens(String(user._id), user.email);
+
+    user.refreshToken = hashedRefreshToken;
+    await user.save();
+
+    return { user, accessToken, refreshToken };
   }
 }

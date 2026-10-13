@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/auth-context";
 import { notificationService } from "@/lib/api/notification-service";
+import { orgService } from "@/lib/api/org-service";
 import { NotificationItem } from "@/lib/api/types";
 
 interface NavbarProps {
@@ -18,6 +19,29 @@ interface NavLinkItem {
   isActive: boolean;
   hasLiveBadge?: boolean;
 }
+
+const PUBLIC_ROOT_SEGMENTS = new Set([
+  "",
+  "api",
+  "arena",
+  "auth",
+  "create",
+  "create-quiz",
+  "deploy",
+  "editor",
+  "explore",
+  "forgot-password",
+  "groups",
+  "institutions",
+  "join",
+  "not-found",
+  "org",
+  "profile",
+  "quiz",
+  "quizzes",
+  "results",
+  "super-admin",
+]);
 
 export default function Navbar({ activeChapter }: NavbarProps) {
   const router = useRouter();
@@ -100,50 +124,93 @@ export default function Navbar({ activeChapter }: NavbarProps) {
     }
   };
 
+  // Check active workspace context from route pathname
+  const pathSegments = pathname?.split("/").filter(Boolean) || [];
+  const firstSegment = pathSegments[0] || "";
+  const isOrgWorkspacePath = Boolean(firstSegment && !PUBLIC_ROOT_SEGMENTS.has(firstSegment));
+  const currentPathOrgSlug = isOrgWorkspacePath ? firstSegment : null;
+  const effectiveOrgSlug = currentPathOrgSlug || user?.orgSlug || "";
+  const isInOrgWorkspace = isOrgWorkspacePath;
   const orgSlug = user?.orgSlug;
-  const isInOrgWorkspace = Boolean(
-    orgSlug && pathname?.startsWith(`/${orgSlug}`)
-  );
 
-  const orgLinks: NavLinkItem[] = orgSlug
+  const [orgDetails, setOrgDetails] = useState<{ name: string; logoUrl?: string } | null>(null);
+
+  useEffect(() => {
+    if (!isInOrgWorkspace || !effectiveOrgSlug) {
+      setOrgDetails(null);
+      return;
+    }
+
+    if (user?.orgSlug === effectiveOrgSlug && user?.institution) {
+      setOrgDetails({ name: user.institution });
+    }
+
+    let isMounted = true;
+    orgService
+      .getOrgBySlug(effectiveOrgSlug)
+      .then((res) => {
+        if (isMounted && res?.data?.organization) {
+          setOrgDetails({
+            name: res.data.organization.name,
+            logoUrl: res.data.organization.logoUrl,
+          });
+        }
+      })
+      .catch(() => {
+        // Fallback gracefully to institution or slug
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isInOrgWorkspace, effectiveOrgSlug, user?.orgSlug, user?.institution]);
+
+  const displayOrgName =
+    orgDetails?.name ||
+    (user?.orgSlug === effectiveOrgSlug ? user?.institution : null) ||
+    (effectiveOrgSlug
+      ? effectiveOrgSlug.charAt(0).toUpperCase() + effectiveOrgSlug.slice(1)
+      : "Organization");
+
+  const orgLinks: NavLinkItem[] = effectiveOrgSlug
     ? [
         {
-          href: `/${orgSlug}`,
+          href: `/${effectiveOrgSlug}`,
           label: "Workspace",
           icon: "apartment",
-          isActive: pathname === `/${orgSlug}`,
+          isActive: pathname === `/${effectiveOrgSlug}`,
         },
         {
-          href: `/${orgSlug}/quizzes`,
+          href: `/${effectiveOrgSlug}/quizzes`,
           label: "Org Quizzes",
           icon: "quiz",
-          isActive: pathname?.startsWith(`/${orgSlug}/quizzes`) ?? false,
+          isActive: pathname?.startsWith(`/${effectiveOrgSlug}/quizzes`) ?? false,
         },
         {
-          href: `/${orgSlug}/groups`,
+          href: `/${effectiveOrgSlug}/groups`,
           label: "Cohorts",
           icon: "hub",
-          isActive: pathname?.startsWith(`/${orgSlug}/groups`) ?? false,
+          isActive: pathname?.startsWith(`/${effectiveOrgSlug}/groups`) ?? false,
         },
         {
-          href: `/${orgSlug}/arena`,
+          href: `/${effectiveOrgSlug}/arena`,
           label: "Live Arena",
           icon: "swords",
-          isActive: pathname?.startsWith(`/${orgSlug}/arena`) ?? false,
+          isActive: pathname?.startsWith(`/${effectiveOrgSlug}/arena`) ?? false,
         },
         {
-          href: `/${orgSlug}/create`,
+          href: `/${effectiveOrgSlug}/create`,
           label: "Create Quiz",
           icon: "add_circle",
-          isActive: pathname?.startsWith(`/${orgSlug}/create`) ?? false,
+          isActive: pathname?.startsWith(`/${effectiveOrgSlug}/create`) ?? false,
         },
         ...(user?.role === "ORG_ADMIN" || user?.role === "SUPER_ADMIN" || user?.isSuperAdmin
           ? [
               {
-                href: `/${orgSlug}/dashboard`,
+                href: `/${effectiveOrgSlug}/dashboard`,
                 label: "Admin Console",
                 icon: "admin_panel_settings",
-                isActive: pathname?.startsWith(`/${orgSlug}/dashboard`) ?? false,
+                isActive: pathname?.startsWith(`/${effectiveOrgSlug}/dashboard`) ?? false,
               },
             ]
           : []),
@@ -184,8 +251,8 @@ export default function Navbar({ activeChapter }: NavbarProps) {
     },
     {
       href: "/join",
-      label: "Join Quiz",
-      icon: "sports_esports",
+      label: "Live Arena",
+      icon: "swords",
       isActive: pathname === "/join",
     },
   ];
@@ -235,20 +302,53 @@ export default function Navbar({ activeChapter }: NavbarProps) {
 
       <header className="fixed top-3 sm:top-5 left-0 right-0 mx-auto w-[calc(100%-1.5rem)] sm:w-[calc(100%-2.5rem)] max-w-max-width-canvas z-50 transition-all duration-300">
         <nav className="navbar-frosted-glass rounded-full px-4 sm:px-6 h-12 sm:h-14 flex items-center justify-between relative">
-          {/* Left: Company Logo */}
+          {/* Left: Company / Org Logo */}
           <div className="flex items-center">
-            <Link href={isInOrgWorkspace && orgSlug ? `/${orgSlug}` : "/"} className="flex items-center gap-2.5 group">
-              <div className="w-8 h-8 rounded-xl overflow-hidden border border-white/15 flex items-center justify-center shadow-md shadow-primary-container/20 group-hover:scale-105 group-hover:border-primary/50 transition-all duration-300 bg-surface-container-high shrink-0">
-                <img
-                  src="/images/logo-icon.png"
-                  alt="QuizzCraft Logo"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <span className="text-headline-sm font-headline-sm tracking-tight text-white font-extrabold text-base sm:text-lg">
-                QuizzCraft<span className="text-tertiary">.app</span>
-              </span>
-            </Link>
+            {isInOrgWorkspace && effectiveOrgSlug ? (
+              <Link
+                href={`/${effectiveOrgSlug}`}
+                className="flex items-center gap-2 sm:gap-2.5 group"
+                title={`${displayOrgName} Workspace`}
+              >
+                <div className="w-8 h-8 rounded-xl overflow-hidden border border-primary/40 flex items-center justify-center shadow-md shadow-primary/20 group-hover:scale-105 group-hover:border-primary transition-all duration-300 bg-primary/10 text-primary shrink-0">
+                  {orgDetails?.logoUrl ? (
+                    <img
+                      src={orgDetails.logoUrl}
+                      alt={displayOrgName}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="material-symbols-outlined text-[19px] text-primary">apartment</span>
+                  )}
+                </div>
+                <div className="flex flex-col text-left">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-headline-sm font-headline-sm tracking-tight text-white font-extrabold text-sm sm:text-base leading-none group-hover:text-primary transition-colors max-w-[120px] sm:max-w-[200px] truncate">
+                      {displayOrgName}
+                    </span>
+                    <span className="px-1.5 py-0.2 rounded text-[9px] font-label-code font-bold uppercase tracking-wider bg-primary/15 text-primary border border-primary/30 shrink-0">
+                      ORG
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono text-on-surface-variant/80 leading-tight">
+                    /{effectiveOrgSlug}
+                  </span>
+                </div>
+              </Link>
+            ) : (
+              <Link href="/" className="flex items-center gap-2.5 group">
+                <div className="w-8 h-8 rounded-xl overflow-hidden border border-white/15 flex items-center justify-center shadow-md shadow-primary-container/20 group-hover:scale-105 group-hover:border-primary/50 transition-all duration-300 bg-surface-container-high shrink-0">
+                  <img
+                    src="/images/logo-icon.png"
+                    alt="QuizzCraft Logo"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <span className="text-headline-sm font-headline-sm tracking-tight text-white font-extrabold text-base sm:text-lg">
+                  QuizzCraft<span className="text-tertiary">.app</span>
+                </span>
+              </Link>
+            )}
           </div>
 
           {/* Center Links */}
@@ -277,15 +377,27 @@ export default function Navbar({ activeChapter }: NavbarProps) {
             ))}
 
             {/* Prominent Org Workspace Tab when in Public Workspace */}
-            {orgSlug && !isInOrgWorkspace && (
+            {user?.orgSlug && !isInOrgWorkspace && (
               <Link
-                href={`/${orgSlug}`}
+                href={`/${user.orgSlug}`}
                 className="ml-1.5 px-3.5 py-1.5 rounded-full bg-primary/20 hover:bg-primary/30 text-white font-bold border border-primary/50 shadow-md shadow-primary/20 hover:scale-[1.03] transition-all flex items-center gap-1.5 text-xs"
-                title={`Enter ${user?.institution || orgSlug.toUpperCase()} Workspace`}
+                title={`Enter ${user?.institution || user.orgSlug.toUpperCase()} Workspace`}
               >
                 <span className="material-symbols-outlined text-[15px] text-primary">apartment</span>
-                <span>{user?.institution ? `${user.institution} Workspace` : `${orgSlug.toUpperCase()} Workspace`}</span>
+                <span>{user?.institution ? `${user.institution} Workspace` : `${user.orgSlug.toUpperCase()} Workspace`}</span>
                 <span className="material-symbols-outlined text-[13px] text-primary">arrow_forward</span>
+              </Link>
+            )}
+
+            {/* Public Workspace Tab when in Org Workspace */}
+            {isInOrgWorkspace && (
+              <Link
+                href="/"
+                className="ml-1.5 px-3.5 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-white/90 hover:text-white font-medium border border-white/20 shadow-sm hover:scale-[1.03] transition-all flex items-center gap-1.5 text-xs"
+                title="Switch to Public Workspace"
+              >
+                <span className="material-symbols-outlined text-[15px] text-primary">public</span>
+                <span>Public Workspace</span>
               </Link>
             )}
           </div>
@@ -439,8 +551,25 @@ export default function Navbar({ activeChapter }: NavbarProps) {
                       </div>
 
                       {/* Nav Links */}
-                      <div className="py-2 space-y-1">
-                        {/* Super Admin Link */}
+                      <div className="py-2 px-2 text-xs flex flex-col gap-0.5">
+                        {/* Current Workspace Indicator */}
+                        <div className="px-3 py-1.5 mb-1 rounded-xl bg-white/[0.04] border border-white/10 flex items-center justify-between text-[11px] text-on-surface-variant">
+                          <span className="flex items-center gap-1.5 font-medium text-white/90">
+                            <span className="material-symbols-outlined text-[15px] text-primary">
+                              {isInOrgWorkspace ? "apartment" : "public"}
+                            </span>
+                            <span>
+                              {isInOrgWorkspace
+                                ? (user?.institution || `${effectiveOrgSlug.toUpperCase()} Org`)
+                                : "Public Workspace"}
+                            </span>
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-white/10 text-tertiary font-semibold">
+                            {isInOrgWorkspace ? "ORG" : "PUBLIC"}
+                          </span>
+                        </div>
+
+                        {/* Super Admin Dashboard Link */}
                         {(user?.role === "SUPER_ADMIN" || user?.isSuperAdmin) && (
                           <Link
                             href="/super-admin"
@@ -455,9 +584,9 @@ export default function Navbar({ activeChapter }: NavbarProps) {
                         )}
 
                         {/* Org Dashboard Link */}
-                        {user?.orgSlug && (user?.role === "ORG_ADMIN" || user?.role === "SUPER_ADMIN" || user?.isSuperAdmin) && (
+                        {effectiveOrgSlug && (user?.role === "ORG_ADMIN" || user?.role === "SUPER_ADMIN" || user?.isSuperAdmin) && (
                           <Link
-                            href={`/${user.orgSlug}/dashboard`}
+                            href={`/${effectiveOrgSlug}/dashboard`}
                             onClick={() => setProfileMenuOpen(false)}
                             className="flex items-center gap-2 px-3 py-2 rounded-xl text-primary hover:text-white hover:bg-primary/10 transition-colors font-semibold"
                           >
@@ -466,30 +595,66 @@ export default function Navbar({ activeChapter }: NavbarProps) {
                           </Link>
                         )}
 
-                        {/* Org Workspace Portal */}
-                        {user?.orgSlug && (
+                        {/* Workspace Switcher */}
+                        {isInOrgWorkspace ? (
                           <Link
-                            href={`/${user.orgSlug}`}
+                            href="/"
                             onClick={() => setProfileMenuOpen(false)}
                             className="flex items-center gap-2 px-3 py-2 rounded-xl text-secondary hover:text-white hover:bg-secondary/10 transition-colors font-medium"
                           >
-                            <span className="material-symbols-outlined text-base">apartment</span>
-                            <span>Org Workspace</span>
+                            <span className="material-symbols-outlined text-base">public</span>
+                            <span>Switch to Public Workspace</span>
                           </Link>
+                        ) : (
+                          user?.orgSlug && (
+                            <Link
+                              href={`/${user.orgSlug}`}
+                              onClick={() => setProfileMenuOpen(false)}
+                              className="flex items-center gap-2 px-3 py-2 rounded-xl text-secondary hover:text-white hover:bg-secondary/10 transition-colors font-medium"
+                            >
+                              <span className="material-symbols-outlined text-base">apartment</span>
+                              <span>{user?.institution ? `${user.institution} Workspace` : "Org Workspace"}</span>
+                            </Link>
+                          )
                         )}
 
-                        {/* Cohort Groups */}
-                        {user?.orgSlug && (
+                        {/* Cohorts & Groups */}
+                        <Link
+                          href={isInOrgWorkspace && effectiveOrgSlug ? `/${effectiveOrgSlug}/groups` : "/groups"}
+                          onClick={() => setProfileMenuOpen(false)}
+                          className="flex items-center gap-2 px-3 py-2 rounded-xl text-tertiary hover:text-white hover:bg-tertiary/10 transition-colors font-medium"
+                        >
+                          <span className="material-symbols-outlined text-base">hub</span>
+                          <span>{isInOrgWorkspace ? "Org Cohorts & Groups" : "Cohorts & Groups"}</span>
+                        </Link>
+
+                        {/* Org Quizzes (when in Org Workspace) */}
+                        {isInOrgWorkspace && effectiveOrgSlug && (
                           <Link
-                            href={`/${user.orgSlug}/groups`}
+                            href={`/${effectiveOrgSlug}/quizzes`}
                             onClick={() => setProfileMenuOpen(false)}
-                            className="flex items-center gap-2 px-3 py-2 rounded-xl text-tertiary hover:text-white hover:bg-tertiary/10 transition-colors"
+                            className="flex items-center gap-2 px-3 py-2 rounded-xl text-on-surface hover:text-white hover:bg-white/10 transition-colors"
                           >
-                            <span className="material-symbols-outlined text-base">hub</span>
-                            <span>Cohorts &amp; Groups</span>
+                            <span className="material-symbols-outlined text-base text-tertiary">
+                              quiz
+                            </span>
+                            <span>Org Quizzes</span>
                           </Link>
                         )}
 
+                        {/* Live Arena */}
+                        <Link
+                          href={isInOrgWorkspace && effectiveOrgSlug ? `/${effectiveOrgSlug}/arena` : "/join"}
+                          onClick={() => setProfileMenuOpen(false)}
+                          className="flex items-center gap-2 px-3 py-2 rounded-xl text-on-surface hover:text-white hover:bg-white/10 transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-base text-amber-accent">
+                            swords
+                          </span>
+                          <span>Live Arena</span>
+                        </Link>
+
+                        {/* Profile & Settings */}
                         <Link
                           href="/profile"
                           onClick={() => setProfileMenuOpen(false)}
@@ -501,6 +666,7 @@ export default function Navbar({ activeChapter }: NavbarProps) {
                           <span>Profile &amp; Settings</span>
                         </Link>
 
+                        {/* My Quizzes */}
                         <Link
                           href="/profile?tab=my-quizzes"
                           onClick={() => setProfileMenuOpen(false)}
@@ -510,17 +676,6 @@ export default function Navbar({ activeChapter }: NavbarProps) {
                             folder_shared
                           </span>
                           <span>My Quizzes</span>
-                        </Link>
-
-                        <Link
-                          href="/quiz"
-                          onClick={() => setProfileMenuOpen(false)}
-                          className="flex items-center gap-2 px-3 py-2 rounded-xl text-on-surface hover:text-white hover:bg-white/10 transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-base text-amber-accent">
-                            sports_esports
-                          </span>
-                          <span>Live Arena</span>
                         </Link>
                       </div>
 
@@ -573,17 +728,32 @@ export default function Navbar({ activeChapter }: NavbarProps) {
         {mobileMenuOpen && (
           <div className="md:hidden mt-2 p-3 rounded-2xl glass-kage border border-white/10 shadow-2xl backdrop-blur-2xl flex flex-col gap-1.5 animate-fadeIn">
             {/* Prominent Org Workspace Banner on Mobile */}
-            {orgSlug && !isInOrgWorkspace && (
+            {user?.orgSlug && !isInOrgWorkspace && (
               <Link
-                href={`/${orgSlug}`}
+                href={`/${user.orgSlug}`}
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-primary/20 border border-primary/40 text-white font-bold text-sm transition-all mb-1 shadow-md"
               >
                 <div className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-base text-primary">apartment</span>
-                  <span>Enter {user?.institution || orgSlug.toUpperCase()} Workspace</span>
+                  <span>Enter {user?.institution || user.orgSlug.toUpperCase()} Workspace</span>
                 </div>
                 <span className="material-symbols-outlined text-sm text-primary">&rarr;</span>
+              </Link>
+            )}
+
+            {/* Public Workspace Banner on Mobile */}
+            {isInOrgWorkspace && (
+              <Link
+                href="/"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center justify-between px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white font-bold text-sm transition-all mb-1 shadow-md"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-base text-primary">public</span>
+                  <span>Switch to Public Workspace</span>
+                </div>
+                <span className="material-symbols-outlined text-sm text-on-surface-variant">&rarr;</span>
               </Link>
             )}
 
@@ -613,6 +783,23 @@ export default function Navbar({ activeChapter }: NavbarProps) {
             ))}
 
             <div className="pt-2 mt-1 border-t border-white/10 flex flex-col gap-1">
+              {/* Workspace Indicator Badge */}
+              <div className="px-3 py-1.5 mb-1 rounded-xl bg-white/[0.04] border border-white/10 flex items-center justify-between text-xs text-on-surface-variant">
+                <span className="flex items-center gap-1.5 font-medium text-white/90">
+                  <span className="material-symbols-outlined text-sm text-primary">
+                    {isInOrgWorkspace ? "apartment" : "public"}
+                  </span>
+                  <span>
+                    {isInOrgWorkspace
+                      ? (user?.institution || `${effectiveOrgSlug.toUpperCase()} Org`)
+                      : "Public Workspace"}
+                  </span>
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono uppercase bg-white/10 text-tertiary font-semibold">
+                  {isInOrgWorkspace ? "ORG" : "PUBLIC"}
+                </span>
+              </div>
+
               {(user?.role === "SUPER_ADMIN" || user?.isSuperAdmin) && (
                 <Link
                   href="/super-admin"
@@ -624,9 +811,9 @@ export default function Navbar({ activeChapter }: NavbarProps) {
                 </Link>
               )}
 
-              {user?.orgSlug && (user?.role === "ORG_ADMIN" || user?.role === "SUPER_ADMIN" || user?.isSuperAdmin) && (
+              {effectiveOrgSlug && (user?.role === "ORG_ADMIN" || user?.role === "SUPER_ADMIN" || user?.isSuperAdmin) && (
                 <Link
-                  href={`/${user.orgSlug}/dashboard`}
+                  href={`/${effectiveOrgSlug}/dashboard`}
                   onClick={() => setMobileMenuOpen(false)}
                   className="flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-headline-sm text-primary hover:text-white hover:bg-primary/10 transition-colors"
                 >
@@ -635,25 +822,54 @@ export default function Navbar({ activeChapter }: NavbarProps) {
                 </Link>
               )}
 
-              {user?.orgSlug && (
+              {isInOrgWorkspace ? (
                 <Link
-                  href={`/${user.orgSlug}`}
+                  href="/"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-headline-sm text-secondary hover:text-white hover:bg-secondary/10 transition-colors"
+                  className="flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-headline-sm text-secondary hover:text-white hover:bg-secondary/10 transition-colors font-medium"
                 >
-                  <span className="material-symbols-outlined text-base">apartment</span>
-                  <span>Org Workspace</span>
+                  <span className="material-symbols-outlined text-base">public</span>
+                  <span>Switch to Public Workspace</span>
                 </Link>
+              ) : (
+                user?.orgSlug && (
+                  <Link
+                    href={`/${user.orgSlug}`}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-headline-sm text-secondary hover:text-white hover:bg-secondary/10 transition-colors font-medium"
+                  >
+                    <span className="material-symbols-outlined text-base">apartment</span>
+                    <span>{user?.institution ? `${user.institution} Workspace` : "Org Workspace"}</span>
+                  </Link>
+                )
               )}
 
-              {user?.orgSlug && (
+              <Link
+                href={isInOrgWorkspace && effectiveOrgSlug ? `/${effectiveOrgSlug}/groups` : "/groups"}
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-headline-sm text-tertiary hover:text-white hover:bg-white/10 transition-colors font-medium"
+              >
+                <span className="material-symbols-outlined text-base text-tertiary">hub</span>
+                <span>{isInOrgWorkspace ? "Org Cohorts & Groups" : "Cohorts & Groups"}</span>
+              </Link>
+
+              {isInOrgWorkspace && effectiveOrgSlug ? (
                 <Link
-                  href={`/${user.orgSlug}/groups`}
+                  href={`/${effectiveOrgSlug}/arena`}
                   onClick={() => setMobileMenuOpen(false)}
                   className="flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-headline-sm text-on-surface hover:text-white hover:bg-white/10 transition-colors"
                 >
-                  <span className="material-symbols-outlined text-base text-tertiary">hub</span>
-                  <span>Cohorts &amp; Groups</span>
+                  <span className="material-symbols-outlined text-base text-amber-accent">swords</span>
+                  <span>Live Arena</span>
+                </Link>
+              ) : (
+                <Link
+                  href="/join"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-headline-sm text-on-surface hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <span className="material-symbols-outlined text-base text-amber-accent">swords</span>
+                  <span>Live Arena</span>
                 </Link>
               )}
 
@@ -666,6 +882,17 @@ export default function Navbar({ activeChapter }: NavbarProps) {
                   account_circle
                 </span>
                 <span>Profile / Account</span>
+              </Link>
+
+              <Link
+                href="/profile?tab=my-quizzes"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-headline-sm text-on-surface hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <span className="material-symbols-outlined text-base text-tertiary">
+                  folder_shared
+                </span>
+                <span>My Quizzes</span>
               </Link>
             </div>
           </div>

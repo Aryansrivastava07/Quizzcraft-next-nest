@@ -3,7 +3,7 @@ import { HydratedDocument } from 'mongoose';
 
 export type AttemptsDocument = HydratedDocument<Attempts>;
 
-@Schema()
+@Schema({ timestamps: true })
 export class Attempts {
   @Prop({ required: true })
   userId!: string;
@@ -20,19 +20,54 @@ export class Attempts {
   @Prop({ required: true })
   lastUpdateAt!: string;
 
+  @Prop({ type: String, default: null })
+  startedAt?: string;
+
+  @Prop({ type: Number, default: 0 })
+  totalTimeSpentSeconds?: number;
+
+  @Prop({ type: Number, default: null })
+  accuracy?: number;
+
   @Prop({
     type: [
       {
         questionId: { type: String, required: true },
         chosenOption: { type: [String], required: true },
+        timeSpentSeconds: { type: Number, default: 0 },
       },
     ],
     default: [],
   })
-  Responses!: { questionId: string; chosenOption: string[] }[];
+  Responses!: { questionId: string; chosenOption: string[]; timeSpentSeconds?: number }[];
 
-  @Prop({ required: true, default: null })
+  @Prop({ type: Number, default: 0 })
   score!: number;
+
+  @Prop({ type: Number, default: 0 })
+  tabSwitchesCount?: number;
+
+  @Prop({ type: Number, default: 0 })
+  copyAttemptsCount?: number;
+
+  @Prop({ type: Number, default: 0 })
+  fullscreenExitsCount?: number;
+
+  @Prop({
+    type: [
+      {
+        eventType: { type: String, required: true },
+        timestamp: { type: String, required: true },
+        details: { type: String, default: '' },
+      },
+    ],
+    default: [],
+  })
+  antiCheatLogs?: {
+    eventType: string;
+    timestamp: string;
+    details?: string;
+  }[];
 }
 
 export const AttemptsSchema = SchemaFactory.createForClass(Attempts);

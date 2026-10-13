@@ -643,9 +643,9 @@ function CreatorEditorContent() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            <div className="flex items-center gap-3 shrink-0 flex-wrap">
               {/* Total EXP Quick Tab Pill */}
-              <div className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-container-high/80 border border-tertiary/30 font-label-code text-xs text-tertiary font-semibold shadow-sm">
+              <div className="hidden sm:flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-surface-container-high/80 border border-tertiary/30 font-label-code text-xs text-tertiary font-semibold shadow-sm">
                 <span className="material-symbols-outlined text-sm">bolt</span>
                 <span>{totalExp} TOTAL XP</span>
               </div>
@@ -653,7 +653,7 @@ function CreatorEditorContent() {
               <button
                 type="button"
                 onClick={() => router.push(quizId ? `/deploy?quizId=${quizId}` : "/deploy")}
-                className="px-3.5 py-2 rounded-xl bg-surface-container-high hover:bg-surface-container border border-primary/40 text-primary font-headline-sm text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all shadow-sm cursor-pointer"
+                className="px-4 py-2.5 rounded-xl bg-surface-container-high hover:bg-surface-container border border-primary/40 text-primary font-headline-sm text-xs font-semibold flex items-center gap-2 active:scale-95 transition-all shadow-sm cursor-pointer"
               >
                 <span className="material-symbols-outlined text-base">hub</span>
                 <span>Deploy &amp; Share</span>
@@ -662,7 +662,7 @@ function CreatorEditorContent() {
               <button
                 type="button"
                 onClick={() => router.push(quizId ? `/quiz?quizId=${quizId}` : "/quiz")}
-                className="px-3.5 py-2 rounded-xl bg-surface-container/70 border border-outline-variant/30 text-on-surface font-headline-sm text-xs flex items-center gap-1.5 hover:border-primary transition-all active:scale-95 cursor-pointer"
+                className="px-4 py-2.5 rounded-xl bg-surface-container/70 border border-outline-variant/30 text-on-surface font-headline-sm text-xs flex items-center gap-2 hover:border-primary transition-all active:scale-95 cursor-pointer"
               >
                 <span className="material-symbols-outlined text-base">play_circle</span>
                 <span>Test Run</span>
@@ -671,7 +671,7 @@ function CreatorEditorContent() {
               <button
                 type="button"
                 onClick={handleAddNewQuestion}
-                className="px-3.5 py-2 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white font-headline-sm text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-all shadow-sm border border-white/10 cursor-pointer"
+                className="px-4 py-2.5 rounded-xl bg-primary-container hover:bg-primary-container/90 text-white font-headline-sm text-xs font-semibold flex items-center gap-2 active:scale-95 transition-all shadow-sm border border-white/10 cursor-pointer"
               >
                 <span className="material-symbols-outlined text-base">add</span>
                 <span>New Question</span>
@@ -680,30 +680,30 @@ function CreatorEditorContent() {
           </section>
 
           {/* Telemetry Bento Bar */}
-          <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="p-3.5 rounded-xl bg-surface-container-low/70 border border-outline-variant/30 flex items-center gap-3 backdrop-blur-md">
-              <div className="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
-                <span className="material-symbols-outlined text-xl">quiz</span>
+          <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+            <div className="p-4 sm:p-5 rounded-2xl bg-surface-container-low/75 border border-outline-variant/30 flex items-center gap-3.5 sm:gap-4 backdrop-blur-xl shadow-lg hover:border-outline-variant/50 transition-all">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-surface-container-high flex items-center justify-center text-primary shrink-0">
+                <span className="material-symbols-outlined text-2xl">quiz</span>
               </div>
-              <div>
-                <span className="block font-label-code text-[11px] text-on-surface-variant">
+              <div className="min-w-0">
+                <span className="block font-label-code text-[11px] text-on-surface-variant font-medium uppercase tracking-wider mb-0.5">
                   TOTAL QUESTIONS
                 </span>
-                <span className="font-stat-counter text-base font-bold text-on-surface">
+                <span className="font-stat-counter text-xl sm:text-2xl font-bold text-on-surface">
                   {questions.length}
                 </span>
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-surface-container-low/70 border border-outline-variant/30 flex items-center gap-3 backdrop-blur-md">
-              <div className="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-tertiary">
-                <span className="material-symbols-outlined text-xl">electric_bolt</span>
+            <div className="p-4 sm:p-5 rounded-2xl bg-surface-container-low/75 border border-outline-variant/30 flex items-center gap-3.5 sm:gap-4 backdrop-blur-xl shadow-lg hover:border-outline-variant/50 transition-all">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-surface-container-high flex items-center justify-center text-tertiary shrink-0">
+                <span className="material-symbols-outlined text-2xl">electric_bolt</span>
               </div>
-              <div>
-                <span className="block font-label-code text-[11px] text-on-surface-variant">
+              <div className="min-w-0">
+                <span className="block font-label-code text-[11px] text-on-surface-variant font-medium uppercase tracking-wider mb-0.5">
                   AWARD CAPACITY
                 </span>
-                <span className="font-stat-counter text-base font-bold text-on-surface">
+                <span className="font-stat-counter text-xl sm:text-2xl font-bold text-on-surface">
                   {totalExp}{" "}
                   <span className="font-body-sm text-xs text-tertiary font-normal">
                     XP
@@ -712,15 +712,15 @@ function CreatorEditorContent() {
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-surface-container-low/70 border border-outline-variant/30 flex items-center gap-3 backdrop-blur-md">
-              <div className="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-secondary">
-                <span className="material-symbols-outlined text-xl">group</span>
+            <div className="p-4 sm:p-5 rounded-2xl bg-surface-container-low/75 border border-outline-variant/30 flex items-center gap-3.5 sm:gap-4 backdrop-blur-xl shadow-lg hover:border-outline-variant/50 transition-all">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-surface-container-high flex items-center justify-center text-secondary shrink-0">
+                <span className="material-symbols-outlined text-2xl">group</span>
               </div>
-              <div>
-                <span className="block font-label-code text-[11px] text-on-surface-variant">
+              <div className="min-w-0">
+                <span className="block font-label-code text-[11px] text-on-surface-variant font-medium uppercase tracking-wider mb-0.5">
                   PEOPLE ATTEMPTED
                 </span>
-                <span className="font-stat-counter text-base font-bold text-on-surface">
+                <span className="font-stat-counter text-xl sm:text-2xl font-bold text-on-surface">
                   {peopleAttempted}{" "}
                   <span className="font-body-sm text-xs text-on-surface-variant font-normal">
                     cadets
@@ -729,15 +729,15 @@ function CreatorEditorContent() {
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-surface-container-low/70 border border-outline-variant/30 flex items-center gap-3 backdrop-blur-md">
-              <div className="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-primary-fixed">
-                <span className="material-symbols-outlined text-xl">analytics</span>
+            <div className="p-4 sm:p-5 rounded-2xl bg-surface-container-low/75 border border-outline-variant/30 flex items-center gap-3.5 sm:gap-4 backdrop-blur-xl shadow-lg hover:border-outline-variant/50 transition-all">
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-surface-container-high flex items-center justify-center text-primary-fixed shrink-0">
+                <span className="material-symbols-outlined text-2xl">analytics</span>
               </div>
-              <div>
-                <span className="block font-label-code text-[11px] text-on-surface-variant">
+              <div className="min-w-0">
+                <span className="block font-label-code text-[11px] text-on-surface-variant font-medium uppercase tracking-wider mb-0.5">
                   AVERAGE SCORE
                 </span>
-                <span className="font-stat-counter text-base font-bold text-primary">
+                <span className="font-stat-counter text-xl sm:text-2xl font-bold text-primary">
                   {averageScore}%{" "}
                   <span className="font-body-sm text-xs text-on-surface-variant font-normal">
                     accuracy
@@ -748,10 +748,10 @@ function CreatorEditorContent() {
           </section>
 
           {/* Filter Strip */}
-          <section className="p-3 rounded-xl bg-surface-container-low/70 border border-outline-variant/20 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 backdrop-blur-md">
-            <div className="flex items-center gap-2 flex-1 max-w-xl">
+          <section className="p-4 sm:p-4.5 rounded-2xl bg-surface-container-low/75 border border-outline-variant/30 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 backdrop-blur-xl shadow-lg">
+            <div className="flex items-center gap-3 flex-1 max-w-xl">
               <div className="relative w-full">
-                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm">
+                <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-outline text-base">
                   search
                 </span>
                 <input
@@ -759,13 +759,13 @@ function CreatorEditorContent() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Filter questions by statement, concept, or option..."
-                  className="w-full bg-surface-container-low/80 pl-9 pr-3 py-1.5 rounded-lg text-xs border border-outline-variant/30 text-on-surface placeholder:text-outline focus:outline-none focus:border-primary-container transition-all"
+                  className="w-full bg-surface-container-lowest/80 pl-10 pr-4 py-2.5 rounded-xl text-xs sm:text-sm border border-outline-variant/30 text-on-surface placeholder:text-outline focus:outline-none focus:border-primary-container transition-all"
                 />
               </div>
               <select
                 value={filterDifficulty}
                 onChange={(e) => setFilterDifficulty(e.target.value)}
-                className="px-3 py-1.5 rounded-lg bg-surface-container text-on-surface font-label-code text-xs border border-outline-variant/30"
+                className="px-4 py-2.5 rounded-xl bg-surface-container text-on-surface font-label-code text-xs border border-outline-variant/30 shrink-0 cursor-pointer"
               >
                 <option value="ALL">All Levels</option>
                 <option value="EASY">Easy</option>
@@ -774,7 +774,7 @@ function CreatorEditorContent() {
               </select>
             </div>
 
-            <div className="flex items-center gap-2 font-label-code text-xs">
+            <div className="flex items-center gap-2.5 font-label-code text-xs">
               <button
                 type="button"
                 onClick={() => {
@@ -782,14 +782,14 @@ function CreatorEditorContent() {
                   navigator.clipboard.writeText(json);
                   setSuccessToast("Quiz questions exported to clipboard as JSON!");
                 }}
-                className="px-3 py-1.5 rounded-lg hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center gap-1 border border-outline-variant/30 transition-colors cursor-pointer"
+                className="px-4 py-2.5 rounded-xl hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface flex items-center gap-2 border border-outline-variant/30 transition-colors cursor-pointer"
               >
                 <span className="material-symbols-outlined text-sm">ios_share</span>
                 <span>Export JSON</span>
               </button>
               <Link
                 href={quizId ? `/deploy?quizId=${quizId}` : "/deploy"}
-                className="px-3 py-1.5 rounded-lg bg-primary-container/20 text-primary-fixed hover:bg-primary-container/30 border border-primary-container/40 flex items-center gap-1 transition-all"
+                className="px-4 py-2.5 rounded-xl bg-primary-container/20 text-primary-fixed hover:bg-primary-container/30 border border-primary-container/40 flex items-center gap-2 transition-all font-semibold shadow-sm"
               >
                 <span className="material-symbols-outlined text-sm">send</span>
                 <span>Deploy Hub</span>
@@ -799,22 +799,22 @@ function CreatorEditorContent() {
         </ParallaxReveal>
 
         {/* Workspace Grid */}
-        <div className="w-full">
+        <div className="w-full mt-2">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* Sidebar Question Map (4 Cols) */}
-            <aside className="lg:col-span-4 flex flex-col gap-4 sticky top-24">
-              <div className="p-4 rounded-2xl bg-surface-container-low/70 border border-outline-variant/30 backdrop-blur-xl flex flex-col gap-3 shadow-lg">
-                <div className="flex items-center justify-between">
-                  <span className="font-headline-sm text-sm text-on-surface font-semibold">
+            <aside className="lg:col-span-4 flex flex-col gap-5 sticky top-24">
+              <div className="p-5 rounded-2xl bg-surface-container-low/75 border border-outline-variant/30 backdrop-blur-xl flex flex-col gap-4 shadow-xl">
+                <div className="flex items-center justify-between pb-0.5">
+                  <span className="font-headline-sm text-sm text-on-surface font-bold tracking-tight">
                     Question Map
                   </span>
-                  <span className="font-label-code text-xs px-2 py-0.5 rounded bg-surface-container text-tertiary">
+                  <span className="font-label-code text-xs px-2.5 py-0.5 rounded-full bg-surface-container-high text-tertiary border border-tertiary/20 font-semibold">
                     {questions.length} NODES
                   </span>
                 </div>
 
-                {/* Node Pills Grid */}
-                <div className="grid grid-cols-5 gap-1.5 font-label-code text-xs max-h-60 overflow-y-auto pr-1">
+                {/* Node Pills Grid (Clean padding, no scale overflow, hidden native scrollbar) */}
+                <div className="grid grid-cols-5 gap-2 font-label-code text-xs max-h-64 overflow-y-auto p-1 scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                   {questions.map((q) => {
                     const isActive = q.id === activeQuestionId;
                     return (
@@ -822,13 +822,13 @@ function CreatorEditorContent() {
                         key={q.id}
                         type="button"
                         onClick={() => setActiveQuestionId(q.id)}
-                        className={`py-2 rounded-lg flex flex-col items-center justify-center transition-all cursor-pointer ${
+                        className={`py-2.5 px-1 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer relative ${
                           isActive
-                            ? "bg-secondary-container text-primary-fixed border border-primary-container shadow-md shadow-primary-container/30 font-bold scale-105"
-                            : "bg-surface-container text-on-surface hover:border-primary-container border border-outline-variant/20"
+                            ? "bg-primary-container/30 text-primary-fixed border-2 border-primary-container shadow-md shadow-primary-container/25 font-bold"
+                            : "bg-surface-container/80 text-on-surface hover:bg-surface-container-high border border-outline-variant/30 hover:border-outline-variant/60"
                         }`}
                       >
-                        <span>#{q.id.toString().padStart(2, "0")}</span>
+                        <span className="tracking-tight">#{q.id.toString().padStart(2, "0")}</span>
                         <span
                           className={`w-1.5 h-1.5 rounded-full mt-1 ${
                             isActive ? "bg-primary-container animate-pulse" : "bg-tertiary"
@@ -839,20 +839,10 @@ function CreatorEditorContent() {
                   })}
                 </div>
 
-                <div className="flex items-center justify-between text-xs font-label-code text-on-surface-variant pt-2 border-t border-outline-variant/20">
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-tertiary" /> Validated ({questions.length})
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-primary" /> Active (#
-                    {activeQuestionId.toString().padStart(2, "0")})
-                  </span>
-                </div>
-
                 <button
                   type="button"
                   onClick={handleAddNewQuestion}
-                  className="w-full py-2 rounded-xl bg-surface-container-high hover:bg-surface-bright text-on-surface font-headline-sm text-xs flex items-center justify-center gap-1.5 border border-outline-variant/30 transition-all active:scale-95 cursor-pointer"
+                  className="w-full py-2.5 rounded-xl bg-surface-container-high hover:bg-surface-bright text-on-surface font-headline-sm text-xs font-semibold flex items-center justify-center gap-2 border border-outline-variant/30 transition-all active:scale-95 cursor-pointer shadow-sm"
                 >
                   <span className="material-symbols-outlined text-base">add_circle</span>
                   <span>Append New Question</span>

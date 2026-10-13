@@ -15,6 +15,7 @@ import {
   JoinGroupDto,
   PostGroupMessageDto,
   UpdateGroupSettingsDto,
+  AssignGroupQuizDto,
 } from './dto/group.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import type { Request } from 'express';
@@ -138,5 +139,35 @@ export class GroupController {
   ) {
     const user = (req as any).user;
     return this.groupService.deleteGroupMessage(groupId, messageId, user);
+  }
+
+  @Post(':groupId/quizzes/assign')
+  async assignQuizToGroup(
+    @Param('groupId') groupId: string,
+    @Body() dto: AssignGroupQuizDto,
+    @Req() req: Request,
+  ) {
+    const user = (req as any).user;
+    return this.groupService.assignQuizToGroup(groupId, dto, user);
+  }
+
+  @Get(':groupId/quizzes/:quizId/results')
+  async getCohortQuizResults(
+    @Param('groupId') groupId: string,
+    @Param('quizId') quizId: string,
+    @Req() req: Request,
+  ) {
+    const user = (req as any).user;
+    return this.groupService.getCohortQuizResults(groupId, quizId, user);
+  }
+
+  @Delete(':groupId/quizzes/:quizId')
+  async unassignQuiz(
+    @Param('groupId') groupId: string,
+    @Param('quizId') quizId: string,
+    @Req() req: Request,
+  ) {
+    const user = (req as any).user;
+    return this.groupService.unassignQuiz(groupId, quizId, user);
   }
 }

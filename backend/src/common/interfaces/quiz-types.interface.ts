@@ -34,6 +34,9 @@ export interface IQuiz {
   scheduledAlertSent?: boolean;
   waitingList?: string[];
   isPractice?: boolean;
+  orgId?: string | null;
+  groupId?: string | null;
+  dueDate?: Date | string | null;
   antiCheat?: boolean;
   fullScreenLock?: boolean;
   shuffleChoices?: boolean;

@@ -17,6 +17,7 @@ import {
   attemptQuizDto,
   deployQuizDto,
   generateQuizDto,
+  copyQuizDto,
 } from './dto/quiz.request.dto';
 import { ServiceResponse } from '../common/interfaces/service-response.interface';
 import { generateQuizResponseData } from './dto/quiz.response.dto';
@@ -26,6 +27,26 @@ import { IAiGeneratedQuizResponse } from '../common/interfaces/quiz.interface'; 
 import { IQuiz } from '../common/interfaces/quiz-types.interface'; // New core interface
 import { Attempts } from '../schemas/attempts.schema';
 import { resolveQuizRelatedImage } from './utils/quiz-image.util';
+
+function checkIsCorrect(
+  userChosen: string | undefined | null,
+  rawAnswer: string | undefined | null,
+  options: string[] = [],
+): boolean {
+  if (!userChosen || rawAnswer === undefined || rawAnswer === null) return false;
+  const u = String(userChosen).trim().toLowerCase();
+  const c = String(rawAnswer).trim().toLowerCase();
+  if (u === c) return true;
+
+  const optIdx = options.findIndex((opt) => String(opt).trim().toLowerCase() === u);
+  if (optIdx >= 0) {
+    if (String(optIdx) === c) return true;
+    if (String(optIdx + 1) === c) return true;
+    const letter = ['a', 'b', 'c', 'd', 'e'][optIdx];
+    if (letter && letter === c) return true;
+  }
+  return false;
+}
 
 @Injectable()
 export class QuizService implements OnModuleInit {
@@ -124,6 +145,20 @@ export class QuizService implements OnModuleInit {
 
         const pin = await this.generateUniquePin();
 
+        const isPracticeBool = dto.isPractice === true || dto.isPractice === 'true';
+        let orgId = dto.orgId ? String(dto.orgId).trim() : null;
+        let isPractice = isPracticeBool;
+
+        if (owner?.ownerId) {
+          const user = await this.UserModel.findById(owner.ownerId).lean();
+          if (user) {
+            const isStudent = user.role === 'ORG_STD' || (user.role as string) === 'ORG_USER';
+            if (isStudent && orgId) {
+              isPractice = true;
+            }
+          }
+        }
+
         const newQuiz: IQuiz = {
           quizId: randomUUID(),
           pin,
@@ -133,11 +168,14 @@ export class QuizService implements OnModuleInit {
           ownerEmail: owner?.ownerEmail,
           isDeployed: false,
           status: 'DRAFT',
+          accessMode: orgId ? 'ORGANIZATION' : 'PUBLIC',
           immediateResult: true,
           questime: 60,
           dynamicShuffle: true,
           temporalLimit: true,
           questions,
+          orgId: orgId || null,
+          isPractice,
         };
         const createdQuiz = await this.QuizModel.create(newQuiz);
         return {
@@ -166,6 +204,24 @@ export class QuizService implements OnModuleInit {
 
     if (!quiz) {
       throw new NotFoundException(`No active quiz found matching PIN: ${pin}`);
+    }
+
+    // 0. Check if Quiz has been Deployed Live
+    const isDraft = quiz.status === 'DRAFT' || (!quiz.isDeployed && quiz.status !== 'ANYTIME' && quiz.status !== 'LIVE' && quiz.status !== 'SCHEDULED');
+    if (isDraft) {
+      return {
+        message: 'Quiz has not been deployed yet',
+        data: {
+          isUndeployed: true,
+          isDraft: true,
+          isLive: false,
+          quizId: quiz.quizId,
+          title: quiz.title,
+          pin: quiz.pin,
+          status: quiz.status || 'DRAFT',
+          message: 'This quiz is currently a draft and has not been deployed yet. Please wait for the host to launch it live before entering.',
+        },
+      };
     }
 
     const now = new Date();
@@ -357,6 +413,9 @@ export class QuizService implements OnModuleInit {
       coverImage?: string;
       accessMode?: 'PUBLIC' | 'PRIVATE' | 'ORGANIZATION';
       organizationDomain?: string;
+      orgId?: string | null;
+      isPractice?: boolean;
+      groupId?: string | null;
       antiCheat?: boolean;
       fullScreenLock?: boolean;
       shuffleChoices?: boolean;
@@ -400,6 +459,15 @@ export class QuizService implements OnModuleInit {
     if (updateData.organizationDomain !== undefined) {
       setPayload.organizationDomain = updateData.organizationDomain;
     }
+    if (updateData.orgId !== undefined) {
+      setPayload.orgId = updateData.orgId;
+    }
+    if (updateData.isPractice !== undefined) {
+      setPayload.isPractice = Boolean(updateData.isPractice);
+    }
+    if (updateData.groupId !== undefined) {
+      setPayload.groupId = updateData.groupId;
+    }
     if (updateData.antiCheat !== undefined) {
       setPayload.antiCheat = Boolean(updateData.antiCheat);
     }
@@ -415,11 +483,18 @@ export class QuizService implements OnModuleInit {
     if (updateData.deploymentType !== undefined) {
       setPayload.deploymentType = updateData.deploymentType;
     }
-    if (updateData.isDeployed !== undefined) {
-      setPayload.isDeployed = Boolean(updateData.isDeployed);
-    }
     if (updateData.status !== undefined) {
       setPayload.status = updateData.status;
+      if (updateData.status === 'DRAFT') {
+        setPayload.isDeployed = false;
+      } else if (['LIVE', 'ANYTIME', 'SCHEDULED'].includes(updateData.status)) {
+        setPayload.isDeployed = true;
+      }
+    } else if (updateData.isDeployed !== undefined) {
+      setPayload.isDeployed = Boolean(updateData.isDeployed);
+      if (!updateData.isDeployed) {
+        setPayload.status = 'DRAFT';
+      }
     }
     if (updateData.immediateResult !== undefined) {
       setPayload.immediateResult = updateData.immediateResult;
@@ -579,8 +654,33 @@ export class QuizService implements OnModuleInit {
   async createAttempt(dto: attemptQuizDto, userId: string) {
     const quiz = await this.QuizModel.findOne({ quizId: dto.quizId });
     if (!quiz) throw new NotFoundException('No Quiz found for this Id');
+
+    const isOwner = quiz.ownerId && String(quiz.ownerId) === String(userId);
+    const now = new Date();
+
+    // Check if undeployed or draft
+    const isDraft = quiz.status === 'DRAFT' || (!quiz.isDeployed && quiz.status !== 'ANYTIME' && quiz.status !== 'LIVE');
+    if (isDraft) {
+      if (!isOwner) {
+        throw new BadRequestException('This quiz is currently in draft mode and has not been deployed yet. Please wait for the host to launch it before entering.');
+      }
+    }
+
+    // Check if scheduled and not started yet
+    if (quiz.status === 'SCHEDULED' && quiz.scheduledFor && now < new Date(quiz.scheduledFor)) {
+      if (!isOwner) {
+        throw new BadRequestException('This quiz is scheduled and is not yet live. Please wait for the scheduled start time.');
+      }
+    }
+
+    // Check if ended
+    if (quiz.status === 'ENDED' || (quiz.liveUntil && now > new Date(quiz.liveUntil))) {
+      throw new BadRequestException('This quiz arena session has concluded and is no longer accepting new attempts.');
+    }
+
     const lastSession = await this.AttemptsModel.findOne({
       userId,
+      quizId: dto.quizId,
       isActive: true,
     });
 
@@ -588,13 +688,15 @@ export class QuizService implements OnModuleInit {
 
     if (lastSession) {
       const lastUpdatedAt = new Date(lastSession.lastUpdateAt).getTime();
-      const now = Date.now();
-      const isExpired = now - lastUpdatedAt >= timeBufferAllowed;
+      const isExpired = now.getTime() - lastUpdatedAt >= timeBufferAllowed;
 
       if (!isExpired) {
         return {
           message: 'An active session already exists',
-          data: { session: lastSession },
+          data: {
+            session: lastSession,
+            createSession: lastSession,
+          },
         };
       }
 
@@ -605,18 +707,24 @@ export class QuizService implements OnModuleInit {
     }
 
     const sessionId = randomUUID();
+    const nowIso = new Date().toISOString();
     const createSession = await this.AttemptsModel.create({
       sessionId,
       quizId: dto.quizId,
       userId,
       isActive: true,
-      lastUpdateAt: new Date().toISOString(),
+      lastUpdateAt: nowIso,
+      startedAt: nowIso,
+      totalTimeSpentSeconds: 0,
+      score: 0,
+      accuracy: 0,
       Responses: [],
     });
 
     return {
-      message: 'dwdw',
+      message: 'Attempt session created',
       data: {
+        session: createSession,
         createSession,
       },
     };
@@ -638,18 +746,22 @@ export class QuizService implements OnModuleInit {
     );
 
     const updatedResponses = [...session.Responses];
+    const userChoice: string[] = dto.option ? [dto.option] : [];
     const newResponse = {
       questionId: dto.questionId,
-      chosenOption: [dto.option],
+      chosenOption: userChoice,
+      timeSpentSeconds: typeof dto.timeSpentSeconds === 'number' ? dto.timeSpentSeconds : 0,
     };
 
     if (existingIndex >= 0) {
-      updatedResponses[existingIndex] = newResponse;
-    } else {
+      if (dto.option) {
+        updatedResponses[existingIndex] = newResponse;
+      }
+    } else if (dto.option) {
       updatedResponses.push(newResponse);
     }
 
-    const result = await this.AttemptsModel.updateOne(
+    await this.AttemptsModel.updateOne(
       { sessionId },
       {
         Responses: updatedResponses,
@@ -667,7 +779,7 @@ export class QuizService implements OnModuleInit {
     const session = await this.AttemptsModel.findOne({ sessionId });
     const user = await this.UserModel.findById(userId);
     if (!user) throw new UnauthorizedException();
-    if (!session || !session.isActive) {
+    if (!session) {
       throw new NotFoundException('Session not found');
     }
 
@@ -675,58 +787,371 @@ export class QuizService implements OnModuleInit {
       throw new UnauthorizedException('User not Authorized');
     }
 
-    const existingIndex = session.Responses.findIndex(
-      (response) => response.questionId === dto.questionId,
-    );
-
     const updatedResponses = [...session.Responses];
-    const newResponse = {
-      questionId: dto.questionId,
-      chosenOption: [dto.option],
+    if (dto.questionId) {
+      const existingIndex = updatedResponses.findIndex(
+        (response) => response.questionId === dto.questionId,
+      );
+      const userChoice: string[] = dto.option ? [dto.option] : [];
+      const newResponse = {
+        questionId: dto.questionId,
+        chosenOption: userChoice,
+        timeSpentSeconds: typeof dto.timeSpentSeconds === 'number' ? dto.timeSpentSeconds : 0,
+      };
+
+      if (existingIndex >= 0) {
+        if (dto.option) {
+          updatedResponses[existingIndex] = newResponse;
+        }
+      } else if (dto.option) {
+        updatedResponses.push(newResponse);
+      }
+    }
+
+    // Evaluate score and accuracy directly upon submission
+    const quiz = await this.QuizModel.findOne({ quizId: session.quizId });
+    let score = 0;
+    if (quiz?.questions) {
+      updatedResponses.forEach((response) => {
+        const questionId = response.questionId;
+        const q = quiz.questions.find((question) => question.questionId === questionId);
+        if (q && response.chosenOption?.[0]) {
+          if (checkIsCorrect(response.chosenOption[0], q.answer, q.options)) {
+            score++;
+          }
+        }
+      });
+    }
+
+    const totalQuestions = quiz?.questions?.length || 0;
+    const accuracy = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
+
+    let totalTimeSpentSeconds =
+      typeof dto.totalTimeSpentSeconds === 'number' && dto.totalTimeSpentSeconds > 0
+        ? dto.totalTimeSpentSeconds
+        : 0;
+
+    if (!totalTimeSpentSeconds) {
+      if (session.startedAt) {
+        totalTimeSpentSeconds = Math.max(
+          1,
+          Math.round((Date.now() - new Date(session.startedAt).getTime()) / 1000),
+        );
+      } else if (session.lastUpdateAt) {
+        totalTimeSpentSeconds = Math.max(
+          1,
+          Math.round((Date.now() - new Date(session.lastUpdateAt).getTime()) / 1000),
+        );
+      }
+    }
+
+    const updatePayload: any = {
+      Responses: updatedResponses,
+      lastUpdateAt: new Date().toISOString(),
+      isActive: false,
+      score,
+      accuracy,
+      totalTimeSpentSeconds,
     };
 
-    if (existingIndex >= 0) {
-      updatedResponses[existingIndex] = newResponse;
-    } else {
-      updatedResponses.push(newResponse);
+    if (typeof dto.tabSwitchesCount === 'number') {
+      updatePayload.tabSwitchesCount = dto.tabSwitchesCount;
+    }
+    if (typeof dto.copyAttemptsCount === 'number') {
+      updatePayload.copyAttemptsCount = dto.copyAttemptsCount;
+    }
+    if (typeof dto.fullscreenExitsCount === 'number') {
+      updatePayload.fullscreenExitsCount = dto.fullscreenExitsCount;
+    }
+    if (Array.isArray(dto.antiCheatLogs) && dto.antiCheatLogs.length > 0) {
+      updatePayload.antiCheatLogs = dto.antiCheatLogs;
     }
 
     await this.AttemptsModel.updateOne(
       { sessionId },
-      {
-        Responses: updatedResponses,
-        lastUpdateAt: new Date().toISOString(),
-        isActive: false,
-      },
+      updatePayload,
     );
 
-    const userAttempt = await this.AttemptsModel.find({
+    const userAttempts = await this.AttemptsModel.find({
       userId,
+      isActive: false,
     });
-    if (userAttempt.length === 1 && userAttempt[0].sessionId === sessionId) {
-      const quizAttempted = (user.quizAttempted || 0) + 1;
-      await this.UserModel.updateOne({ _id: userId }, { quizAttempted });
-    }
+    const quizAttempted = userAttempts.length;
+    const totalScoreSum = userAttempts.reduce(
+      (acc, curr) => acc + (typeof curr.score === 'number' ? curr.score : 0),
+      0,
+    );
+    const newAverageScore = quizAttempted > 0 ? Math.round(totalScoreSum / quizAttempted) : score;
+    await this.UserModel.updateOne({ _id: userId }, { quizAttempted, averageScore: newAverageScore });
 
     return {
       message: 'Quiz Submitted',
+      data: {
+        score,
+        accuracy,
+        totalTimeSpentSeconds,
+      },
+    };
+  }
+
+  async logAntiCheatEvent(
+    sessionId: string,
+    dto: { eventType: string; details?: string; timestamp?: string },
+    userId: string,
+  ): Promise<ServiceResponse<any>> {
+    const session = await this.AttemptsModel.findOne({ sessionId });
+    if (!session) throw new NotFoundException('Session not found');
+    if (session.userId !== userId) throw new UnauthorizedException();
+
+    const timestamp = dto.timestamp || new Date().toISOString();
+    const eventType = dto.eventType || 'TAB_SWITCH';
+    const details = dto.details || '';
+
+    const newLog = { eventType, timestamp, details };
+    const incField: any = {};
+    if (eventType === 'TAB_SWITCH') incField.tabSwitchesCount = 1;
+    else if (eventType === 'COPY_ATTEMPT') incField.copyAttemptsCount = 1;
+    else if (eventType === 'FULLSCREEN_EXIT') incField.fullscreenExitsCount = 1;
+
+    await this.AttemptsModel.updateOne(
+      { sessionId },
+      {
+        $push: { antiCheatLogs: newLog },
+        $inc: incField,
+        $set: { lastUpdateAt: new Date().toISOString() },
+      },
+    );
+
+    return {
+      message: 'Anti-cheat event logged',
       data: true,
     };
+  }
+
+  async getAttemptResult(sessionId: string, userId: string) {
+    const session = await this.AttemptsModel.findOne({ sessionId });
+    if (!session) {
+      throw new NotFoundException('Quiz attempt session not found');
+    }
+
+    const quiz = await this.QuizModel.findOne({ quizId: session.quizId });
+    if (!quiz) {
+      throw new NotFoundException('Quiz not found');
+    }
+
+    const isSessionOwner = String(session.userId) === String(userId);
+    const isQuizOwner = quiz.ownerId && String(quiz.ownerId) === String(userId);
+
+    if (!isSessionOwner && !isQuizOwner) {
+      throw new UnauthorizedException('Not authorized to view this attempt result');
+    }
+
+    // Auto-finalize attempt if viewed
+    if (session.isActive) {
+      await this.AttemptsModel.updateOne({ sessionId }, { isActive: false });
+      session.isActive = false;
+    }
+
+    const cadetUser = await this.UserModel.findById(session.userId)
+      .select('username fullName profilePicture email xp')
+      .lean();
+
+    const totalQuestions = quiz.questions?.length || 0;
+
+    // Calculate score and accuracy if not saved or 0
+    let score = typeof session.score === 'number' ? session.score : 0;
+    if (session.score === null || session.score === undefined || session.score === 0) {
+      score = 0;
+      session.Responses.forEach((response) => {
+        const q = quiz.questions?.find((question) => question.questionId === response.questionId);
+        if (q && response.chosenOption?.[0]) {
+          if (checkIsCorrect(response.chosenOption[0], q.answer, q.options)) {
+            score++;
+          }
+        }
+      });
+      await this.AttemptsModel.updateOne({ sessionId }, { score, isActive: false });
+    }
+
+    const accuracy = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
+    const correctCount = score;
+    const incorrectCount = Math.max(0, totalQuestions - score);
+
+    let totalTimeSpentSeconds = session.totalTimeSpentSeconds || 0;
+    if (!totalTimeSpentSeconds) {
+      if (session.startedAt && session.lastUpdateAt) {
+        totalTimeSpentSeconds = Math.max(
+          1,
+          Math.round(
+            (new Date(session.lastUpdateAt).getTime() - new Date(session.startedAt).getTime()) / 1000,
+          ),
+        );
+      } else {
+        totalTimeSpentSeconds = Math.max(1, totalQuestions * 30);
+      }
+    }
+
+    const averageTimePerQuestion =
+      totalQuestions > 0 ? Number((totalTimeSpentSeconds / totalQuestions).toFixed(1)) : 0;
+
+    // Query all completed attempts for leaderboard & ranking
+    const allAttempts = await this.AttemptsModel.find({
+      quizId: session.quizId,
+      isActive: false,
+    }).lean();
+
+    const totalParticipants = Math.max(1, allAttempts.length);
+    const participantUserIds = allAttempts.map((a) => a.userId).filter(Boolean);
+    const participants = await this.UserModel.find({ _id: { $in: participantUserIds } })
+      .select('username fullName profilePicture')
+      .lean();
+    const pMap = new Map(participants.map((p) => [String(p._id), p]));
+
+    const sortedAttempts = [...allAttempts].sort((a, b) => {
+      const scoreA = typeof a.score === 'number' ? a.score : 0;
+      const scoreB = typeof b.score === 'number' ? b.score : 0;
+      if (scoreB !== scoreA) return scoreB - scoreA;
+      const timeA = a.totalTimeSpentSeconds || 99999;
+      const timeB = b.totalTimeSpentSeconds || 99999;
+      return timeA - timeB;
+    });
+
+    const rankIndex = sortedAttempts.findIndex((a) => a.sessionId === sessionId);
+    const rank = rankIndex >= 0 ? rankIndex + 1 : 1;
+    const percentile =
+      totalParticipants > 0
+        ? Math.round(((totalParticipants - rank + 1) / totalParticipants) * 100)
+        : 100;
+
+    let grade = 'F';
+    if (accuracy >= 95) grade = 'A+';
+    else if (accuracy >= 85) grade = 'A';
+    else if (accuracy >= 75) grade = 'B+';
+    else if (accuracy >= 65) grade = 'B';
+    else if (accuracy >= 50) grade = 'C';
+
+    const questionsBreakdown = (quiz.questions || []).map((q, idx) => {
+      const userResp = session.Responses.find((r) => r.questionId === q.questionId);
+      const chosen = userResp?.chosenOption?.[0] || null;
+      const isCorrect = checkIsCorrect(chosen, q.answer, q.options);
+
+      return {
+        id: idx + 1,
+        questionId: q.questionId,
+        question: q.question,
+        options: q.options || [],
+        userAnswer: chosen,
+        correctAnswer: q.answer,
+        isCorrect,
+        explanation: q.explanation || '',
+        level: q.level || 'MEDIUM',
+        xp: q.xp || 200,
+        timeSpentSeconds: userResp?.timeSpentSeconds || averageTimePerQuestion,
+        reference: q.reference,
+      };
+    });
+
+    const leaderboard = sortedAttempts.map((att, idx) => {
+      const cadet = pMap.get(String(att.userId));
+      const s = typeof att.score === 'number' ? att.score : 0;
+      const p = totalQuestions > 0 ? Math.round((s / totalQuestions) * 100) : 0;
+      const t = att.totalTimeSpentSeconds || totalQuestions * 30;
+      return {
+        rank: idx + 1,
+        sessionId: att.sessionId,
+        userId: att.userId,
+        username: cadet?.username || 'Cadet Pilot',
+        fullName: cadet?.fullName || cadet?.username || 'Cadet Pilot',
+        avatar: cadet?.profilePicture || '',
+        score: s,
+        percentage: p,
+        totalTimeSpentSeconds: t,
+        avgResponseTime: totalQuestions > 0 ? Number((t / totalQuestions).toFixed(1)) : 0,
+        isCurrentUser: att.sessionId === sessionId,
+      };
+    });
+
+    return {
+      message: 'Attempt result loaded',
+      data: {
+        attempt: {
+          sessionId: session.sessionId,
+          quizId: session.quizId,
+          score,
+          totalQuestions,
+          accuracy,
+          correctCount,
+          incorrectCount,
+          unansweredCount: Math.max(0, totalQuestions - session.Responses.length),
+          totalTimeSpentSeconds,
+          averageTimePerQuestion,
+          rank,
+          totalParticipants,
+          percentile,
+          grade,
+          user: {
+            username: cadetUser?.username || 'Cadet',
+            fullName: cadetUser?.fullName || cadetUser?.username || 'Cadet',
+            avatar: cadetUser?.profilePicture || '',
+          },
+        },
+        quiz: {
+          quizId: quiz.quizId,
+          title: quiz.title,
+          coverImage: quiz.coverImage,
+          pin: quiz.pin,
+          questime: quiz.questime || 60,
+          totalQuestions,
+        },
+        questions: questionsBreakdown,
+        leaderboard,
+      },
+    };
+  }
+
+  async getLatestAttemptResult(quizId: string | undefined, userId: string) {
+    const filter: any = { userId };
+    if (quizId) {
+      filter.quizId = quizId;
+    }
+    let latestAttempt = await this.AttemptsModel.findOne({ ...filter, isActive: false }).sort({
+      updatedAt: -1,
+      lastUpdateAt: -1,
+      _id: -1,
+    });
+
+    if (!latestAttempt) {
+      latestAttempt = await this.AttemptsModel.findOne(filter).sort({
+        updatedAt: -1,
+        lastUpdateAt: -1,
+        _id: -1,
+      });
+    }
+
+    if (!latestAttempt) {
+      throw new NotFoundException('No completed attempt found');
+    }
+
+    return this.getAttemptResult(latestAttempt.sessionId, userId);
   }
 
   async getScore(sessionId: string, userId: string) {
     const user = await this.UserModel.findById(userId);
     const session = await this.AttemptsModel.findOne({ sessionId });
     if (!user || session?.userId != userId) throw new UnauthorizedException();
-    if (!session || session.isActive) {
-      throw new InternalServerErrorException('Session is still active');
+    if (!session) {
+      throw new NotFoundException('Session not found');
     }
     const quiz = await this.QuizModel.findOne({ quizId: session.quizId });
     let score = 0;
     session.Responses.forEach((response) => {
       const questionId = response.questionId;
-      const correctOption = quiz?.questions.find((question) => question.questionId === questionId)?.answer;
-      score += Number(correctOption === response.chosenOption[0]);
+      const q = quiz?.questions.find((question) => question.questionId === questionId);
+      if (q && response.chosenOption?.[0]) {
+        if (checkIsCorrect(response.chosenOption[0], q.answer, q.options)) {
+          score++;
+        }
+      }
     });
     await this.AttemptsModel.updateOne({ sessionId }, { score });
     const userAttemptsCount = Math.max(1, user.quizAttempted || 1);
@@ -748,6 +1173,17 @@ export class QuizService implements OnModuleInit {
 
     const user = await this.UserModel.findById(userId);
     if (!user) throw new UnauthorizedException('User not found');
+
+    const isStudentUser = user.role === 'ORG_STD' || (user.role as string) === 'ORG_USER';
+
+    // Strict RBAC on Deploy:
+    // If the quiz is an organization quiz (quiz.orgId exists) and user is a learner,
+    // they are forbidden from deploying it (training and peer sharing only).
+    if (quiz.orgId && isStudentUser) {
+      throw new ForbiddenException(
+        'Learners cannot deploy organization quizzes. Quizzes created inside an organization workspace are for personal training and peer sharing only.',
+      );
+    }
 
     const accessMode = dto.accessMode || 'PUBLIC';
     let organizationDomain = dto.organizationDomain ? dto.organizationDomain.toLowerCase().trim() : null;
@@ -808,12 +1244,21 @@ export class QuizService implements OnModuleInit {
       liveUntil = null;
     }
 
-    const isOrgUser = user.role === 'ORG_STD' || (user.role as string) === 'ORG_USER';
-    const isPracticeFinal = isOrgUser ? true : (dto.isPractice ?? false);
-    const accessModeFinal = isOrgUser ? 'PRIVATE' : accessMode;
-    const orgIdFinal = user.orgId || null;
-    const groupIdFinal = (!isOrgUser && dto.groupId) ? dto.groupId : null;
-    const dueDateFinal = (!isOrgUser && dto.dueDate) ? new Date(dto.dueDate) : null;
+    const orgIdFinal = quiz.orgId || (dto.groupId ? user.orgId : null);
+    const isOrgQuiz = Boolean(orgIdFinal);
+    const isOrgStudentQuiz = isOrgQuiz && isStudentUser;
+    const isPracticeFinal = isOrgStudentQuiz ? true : (dto.isPractice ?? false);
+
+    // Strict workspace isolation: an organization quiz cannot be marked PUBLIC; a non-org quiz cannot be marked ORGANIZATION
+    let accessModeFinal: 'PUBLIC' | 'PRIVATE' | 'ORGANIZATION';
+    if (isOrgQuiz) {
+      accessModeFinal = isOrgStudentQuiz ? 'PRIVATE' : 'ORGANIZATION';
+    } else {
+      accessModeFinal = dto.accessMode === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC';
+    }
+
+    const groupIdFinal = (!isStudentUser && dto.groupId) ? dto.groupId : null;
+    const dueDateFinal = (!isStudentUser && dto.dueDate) ? new Date(dto.dueDate) : null;
 
     const updated = await this.QuizModel.findOneAndUpdate(
       { quizId },
@@ -835,7 +1280,7 @@ export class QuizService implements OnModuleInit {
           shuffleChoices: dto.shuffleChoices ?? true,
           allowRetries: dto.allowRetries ?? false,
           isPractice: isPracticeFinal,
-          orgId: orgIdFinal,
+          orgId: orgIdFinal || null,
           groupId: groupIdFinal,
           dueDate: dueDateFinal,
         },
@@ -850,7 +1295,7 @@ export class QuizService implements OnModuleInit {
         deploymentType,
         status,
         accessMode,
-        adminUrl: `/quiz/admin?quizId=${encodeURIComponent(quizId)}`,
+        adminUrl: `/quiz/review/${encodeURIComponent(quizId)}`,
         joinUrl: `/join`,
         pin: quiz.pin,
       },
@@ -1032,6 +1477,7 @@ export class QuizService implements OnModuleInit {
 
     const filter: any = {
       accessMode: 'PUBLIC',
+      orgId: { $in: [null, ''] },
       status: { $in: ['LIVE', 'SCHEDULED', 'ANYTIME', 'ENDED'] },
     };
 
@@ -1090,6 +1536,7 @@ export class QuizService implements OnModuleInit {
         attemptsCount: countMap.get(q.quizId) || 0,
         questime: q.questime || 60,
         createdAt: q.createdAt,
+        antiCheat: Boolean(q.antiCheat),
         creator: {
           username: creator?.username || 'QuizzCraft Creator',
           fullName: creator?.fullName || creator?.username || 'Creator',
@@ -1151,6 +1598,12 @@ export class QuizService implements OnModuleInit {
       highestScore: number;
       lowestScore: number;
       passRate: number;
+      averageTimeSeconds?: number;
+      averageTimePerQuestion?: number;
+      totalCorrectAnswers?: number;
+      totalIncorrectAnswers?: number;
+      overallCorrectRate?: number;
+      overallIncorrectRate?: number;
     };
     leaderboard: Array<{
       sessionId: string;
@@ -1211,6 +1664,8 @@ export class QuizService implements OnModuleInit {
     const totalQuestions = quiz.questions?.length || 0;
     let completedCount = 0;
     let totalScoreSum = 0;
+    let totalTimeSum = 0;
+    let totalCorrectAnswers = 0;
     const numericScores: number[] = [];
 
     const leaderboard = attempts
@@ -1223,6 +1678,22 @@ export class QuizService implements OnModuleInit {
           totalScoreSum += percentage;
           completedCount++;
           numericScores.push(score);
+          totalCorrectAnswers += score;
+
+          const attemptTime =
+            attempt.totalTimeSpentSeconds ||
+            (attempt.startedAt && attempt.lastUpdateAt
+              ? Math.max(
+                  1,
+                  Math.round(
+                    (new Date(attempt.lastUpdateAt).getTime() -
+                      new Date(attempt.startedAt).getTime()) /
+                      1000,
+                  ),
+                )
+              : Math.max(1, totalQuestions * 30));
+
+          totalTimeSum += attemptTime;
         }
 
         return {
@@ -1236,6 +1707,10 @@ export class QuizService implements OnModuleInit {
           percentage,
           isActive: attempt.isActive,
           lastUpdateAt: attempt.lastUpdateAt,
+          tabSwitchesCount: (attempt as any).tabSwitchesCount || 0,
+          copyAttemptsCount: (attempt as any).copyAttemptsCount || 0,
+          fullscreenExitsCount: (attempt as any).fullscreenExitsCount || 0,
+          antiCheatLogs: isOwner ? ((attempt as any).antiCheatLogs || []) : [],
         };
       })
       .sort((a, b) => b.score - a.score || b.percentage - a.percentage);
@@ -1246,6 +1721,21 @@ export class QuizService implements OnModuleInit {
     const passThreshold = totalQuestions * 0.5;
     const passedCount = numericScores.filter((s) => s >= passThreshold).length;
     const passRate = completedCount > 0 ? Math.round((passedCount / completedCount) * 100) : 0;
+
+    // Aggregate metrics across all attempts for creator review
+    const totalAttemptedQuestions = completedCount * totalQuestions;
+    const totalIncorrectAnswers = Math.max(0, totalAttemptedQuestions - totalCorrectAnswers);
+    const overallCorrectRate =
+      totalAttemptedQuestions > 0
+        ? Math.round((totalCorrectAnswers / totalAttemptedQuestions) * 100)
+        : 0;
+    const overallIncorrectRate = totalAttemptedQuestions > 0 ? 100 - overallCorrectRate : 0;
+    const averageTimeSeconds =
+      completedCount > 0 ? Math.round(totalTimeSum / completedCount) : 0;
+    const averageTimePerQuestion =
+      completedCount > 0 && totalQuestions > 0
+        ? Number((averageTimeSeconds / totalQuestions).toFixed(1))
+        : 0;
 
     const canAttempt =
       quiz.status === 'LIVE' ||
@@ -1293,11 +1783,131 @@ export class QuizService implements OnModuleInit {
           highestScore,
           lowestScore,
           passRate,
+          averageTimeSeconds,
+          averageTimePerQuestion,
+          totalCorrectAnswers,
+          totalIncorrectAnswers,
+          overallCorrectRate,
+          overallIncorrectRate,
         },
         leaderboard,
         isOwner,
         isPublic,
         canAttempt: Boolean(canAttempt),
+      },
+    };
+  }
+
+  async copyQuiz(
+    quizId: string,
+    userId: string,
+    dto: copyQuizDto,
+  ): Promise<ServiceResponse<any>> {
+    const originalQuiz = await this.QuizModel.findOne({ quizId });
+    if (!originalQuiz) {
+      throw new NotFoundException('Quiz not found');
+    }
+
+    const user = await this.UserModel.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException('User not authenticated');
+    }
+
+    // Permission check: owner of quiz, super admin, or org admin if inside org
+    const isOwner =
+      originalQuiz.ownerId === userId ||
+      (originalQuiz.ownerEmail && originalQuiz.ownerEmail.toLowerCase() === user.email.toLowerCase());
+    const isSuper = user.role === 'SUPER_ADMIN' || (user as any).isSuperAdmin;
+    const isOrgAdminOfQuiz =
+      originalQuiz.orgId &&
+      user.orgId === originalQuiz.orgId &&
+      user.role === 'ORG_ADMIN';
+
+    if (!isOwner && !isSuper && !isOrgAdminOfQuiz) {
+      // Allow copying if it's a public quiz (any user can clone a public quiz into their own workspace/sandbox)
+      if (originalQuiz.accessMode !== 'PUBLIC') {
+        throw new ForbiddenException('Only the owner or authorized administrator can copy this assessment');
+      }
+    }
+
+    const targetWorkspace = dto.targetWorkspace || 'PUBLIC';
+    let newAccessMode: 'PUBLIC' | 'PRIVATE' | 'ORGANIZATION' = 'PUBLIC';
+    let newOrgId: string | null = null;
+    let newOrganizationDomain: string | null = null;
+    let isPractice = false;
+
+    if (targetWorkspace === 'ORGANIZATION') {
+      const targetOrgId = dto.orgId || user.orgId;
+      if (!targetOrgId) {
+        throw new BadRequestException('Target organization ID is required to copy a quiz into an organization workspace');
+      }
+
+      if (!isSuper && user.orgId !== targetOrgId) {
+        throw new ForbiddenException('You are not a member of the target organization');
+      }
+
+      newAccessMode = 'ORGANIZATION';
+      newOrgId = targetOrgId;
+      isPractice = user.role === 'ORG_STD' || (user.role as string) === 'ORG_USER';
+    } else if (targetWorkspace === 'PRIVATE') {
+      newAccessMode = 'PRIVATE';
+      newOrgId = null;
+      isPractice = false;
+    } else {
+      // PUBLIC
+      newAccessMode = 'PUBLIC';
+      newOrgId = null;
+      isPractice = false;
+    }
+
+    const newPin = await this.generateUniquePin();
+    const newQuizId = randomUUID();
+    const newTitle = dto.title?.trim() || `Copy of ${originalQuiz.title}`;
+
+    const newQuestions = (originalQuiz.questions || []).map((q, idx) => ({
+      questionId: randomUUID(),
+      question: q.question,
+      options: [...(q.options || [])],
+      answer: q.answer,
+      explanation: q.explanation || '',
+      level: q.level || (idx % 3 === 0 ? 'EASY' : idx % 3 === 1 ? 'MEDIUM' : 'HARD'),
+      xp: q.xp || 200,
+      reference: q.reference ? { ...q.reference } : undefined,
+    }));
+
+    const copiedQuizDoc = await (this.QuizModel as any).create({
+      quizId: newQuizId,
+      pin: newPin,
+      title: newTitle,
+      coverImage: originalQuiz.coverImage || '',
+      ownerId: userId,
+      ownerEmail: user.email,
+      accessMode: newAccessMode,
+      orgId: newOrgId,
+      organizationDomain: newOrganizationDomain || undefined,
+      deploymentType: originalQuiz.deploymentType || 'ANYTIME',
+      isDeployed: false,
+      status: 'DRAFT',
+      isPractice,
+      antiCheat: originalQuiz.antiCheat ?? true,
+      fullScreenLock: originalQuiz.fullScreenLock ?? true,
+      shuffleChoices: originalQuiz.shuffleChoices ?? true,
+      allowRetries: originalQuiz.allowRetries ?? false,
+      immediateResult: originalQuiz.immediateResult ?? true,
+      questime: originalQuiz.questime || 60,
+      dynamicShuffle: originalQuiz.dynamicShuffle ?? true,
+      temporalLimit: originalQuiz.temporalLimit ?? true,
+      questions: newQuestions,
+    });
+
+    const quizObj = (copiedQuizDoc as any)?.toObject
+      ? (copiedQuizDoc as any).toObject()
+      : copiedQuizDoc;
+
+    return {
+      message: 'Quiz copy created successfully',
+      data: {
+        quiz: quizObj,
       },
     };
   }

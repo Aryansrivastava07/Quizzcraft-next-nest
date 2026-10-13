@@ -16,6 +16,7 @@ import {
   JoinGroupDto,
   PostGroupMessageDto,
   UpdateGroupSettingsDto,
+  AssignGroupQuizDto,
 } from './dto/group.dto';
 import { ServiceResponse } from '../common/interfaces/service-response.interface';
 import { CohortWsGateway } from './cohort.gateway';
@@ -216,8 +217,27 @@ export class GroupService {
     if (!group) throw new NotFoundException('Group not found');
 
     const userIdStr = String(user._id);
-    const isMember = (group.memberIds || []).includes(userIdStr);
-    const isCreator = group.creatorId === userIdStr;
+    let isCreator = group.creatorId === userIdStr;
+
+    // Self-healing: if creatorId is missing or corrupt, check user's groupIds or single-member creation
+    if (!isCreator && (!group.creatorId || group.creatorId === 'undefined')) {
+      if ((user.groupIds || []).includes(group.groupId) || (group.memberIds || []).length <= 1) {
+        isCreator = true;
+        await this.groupModel.updateOne(
+          { groupId },
+          { creatorId: userIdStr, $addToSet: { memberIds: userIdStr } }
+        );
+        group.creatorId = userIdStr;
+      }
+    }
+
+    // Auto-heal membership if creator is somehow missing from memberIds
+    if (isCreator && !(group.memberIds || []).includes(userIdStr)) {
+      await this.groupModel.updateOne({ groupId }, { $addToSet: { memberIds: userIdStr } });
+      group.memberIds = [...(group.memberIds || []), userIdStr];
+    }
+
+    const isMember = (group.memberIds || []).includes(userIdStr) || isCreator;
     const isSuper = user.role === 'SUPER_ADMIN' || Boolean((user as any).isSuperAdmin);
 
     // If org-scoped group: enforce org access
@@ -564,6 +584,9 @@ export class GroupService {
         status: q.status,
         deploymentType: q.deploymentType,
         dueDate: q.dueDate,
+        scheduledFor: q.scheduledFor,
+        liveUntil: q.liveUntil,
+        liveDurationMinutes: q.liveDurationMinutes,
         deadlineStatus,
         questionCount: q.questions?.length || 0,
         createdAt: (q as any).createdAt,
@@ -687,8 +710,18 @@ export class GroupService {
       throw new ForbiddenException('Unauthorized');
     }
 
-    if (!group.memberIds.includes(String(user._id)) && (!isOrgGroup || user.role !== 'ORG_ADMIN')) {
+    const userIdStr = String(user._id);
+    const isCreator = group.creatorId === userIdStr;
+    const isMember = (group.memberIds || []).includes(userIdStr) || isCreator;
+
+    if (!isMember && (!isOrgGroup || user.role !== 'ORG_ADMIN')) {
       throw new ForbiddenException('You must be a member of this group to post messages');
+    }
+
+    // Auto-heal membership if creator is posting
+    if (isCreator && !(group.memberIds || []).includes(userIdStr)) {
+      await this.groupModel.updateOne({ groupId }, { $addToSet: { memberIds: userIdStr } });
+      group.memberIds.push(userIdStr);
     }
 
     const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
@@ -719,7 +752,11 @@ export class GroupService {
     }
 
     // Real-time broadcast to connected clients via WebSocket
-    this.cohortWsGateway.broadcastNewMessage(groupId, message);
+    try {
+      this.cohortWsGateway.broadcastNewMessage(groupId, message);
+    } catch (wsErr) {
+      // Non-blocking
+    }
 
     return {
       message: 'Message posted successfully',
@@ -752,7 +789,11 @@ export class GroupService {
     await message.save();
 
     // Real-time broadcast to connected clients via WebSocket
-    this.cohortWsGateway.broadcastPinMessage(groupId, messageId, message.isPinned);
+    try {
+      this.cohortWsGateway.broadcastPinMessage(groupId, messageId, message.isPinned);
+    } catch (wsErr) {
+      // Non-blocking
+    }
 
     return {
       message: message.isPinned ? 'Message pinned as announcement' : 'Message unpinned',
@@ -787,11 +828,255 @@ export class GroupService {
     await this.messageModel.deleteOne({ messageId });
 
     // Real-time broadcast to connected clients via WebSocket
-    this.cohortWsGateway.broadcastDeleteMessage(groupId, messageId);
+    try {
+      this.cohortWsGateway.broadcastDeleteMessage(groupId, messageId);
+    } catch (wsErr) {
+      // Non-blocking
+    }
 
     return {
       message: 'Message deleted',
       data: { messageId },
     };
   }
+
+  // ==================== 12. ASSIGN QUIZ TO COHORT (WITH ARENA SUPPORT) ====================
+  async assignQuizToGroup(
+    groupId: string,
+    dto: AssignGroupQuizDto,
+    userPayload: any,
+  ): Promise<ServiceResponse<any>> {
+    const user = await this.userModel.findById(userPayload.userId).lean();
+    const group = await this.groupModel.findOne({ groupId });
+    if (!group) throw new NotFoundException('Group not found');
+
+    const isOrgGroup = group.orgId && group.accessMode !== 'PUBLIC';
+    if (isOrgGroup && user?.orgId !== group.orgId && user?.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException('Unauthorized');
+    }
+
+    const isInstructor =
+      group.creatorId === String(user?._id) ||
+      (isOrgGroup && user?.role === 'ORG_ADMIN') ||
+      user?.role === 'SUPER_ADMIN';
+
+    if (!isInstructor) {
+      throw new ForbiddenException('Only the instructor can assign quizzes to this cohort');
+    }
+
+    const quiz = await this.quizModel.findOne({ quizId: dto.quizId });
+    if (!quiz) throw new NotFoundException('Quiz not found');
+
+    const now = new Date();
+    const durationMinutes = Math.max(10, Math.min(1440, Number(dto.durationMinutes) || 60));
+
+    if (dto.isArena) {
+      let scheduledFor = now;
+      if (dto.scheduledFor) {
+        const parsed = new Date(dto.scheduledFor);
+        if (!isNaN(parsed.getTime())) {
+          scheduledFor = parsed;
+        }
+      }
+      const liveUntil = new Date(scheduledFor.getTime() + durationMinutes * 60 * 1000);
+      const isUpcoming = scheduledFor.getTime() > now.getTime();
+
+      quiz.deploymentType = isUpcoming ? 'SCHEDULED' : 'LIVE';
+      quiz.status = isUpcoming ? 'SCHEDULED' : 'LIVE';
+      quiz.scheduledFor = scheduledFor;
+      quiz.liveDurationMinutes = durationMinutes;
+      quiz.liveUntil = liveUntil;
+    } else {
+      quiz.deploymentType = 'ANYTIME';
+      quiz.status = 'ANYTIME';
+      if (dto.dueDate) {
+        const parsedDue = new Date(dto.dueDate);
+        if (!isNaN(parsedDue.getTime())) {
+          quiz.dueDate = parsedDue;
+        }
+      }
+    }
+
+    quiz.groupId = groupId;
+    quiz.isDeployed = true;
+    await quiz.save();
+
+    // Broadcast WebSocket event to all cadets in the cohort
+    try {
+      this.cohortWsGateway.broadcastQuizAssigned(groupId, quiz);
+    } catch (wsErr) {
+      // Non-blocking
+    }
+
+    // Notify cohort members (excluding instructor)
+    const cadetIds = (group.memberIds || []).filter((id) => id !== String(user?._id));
+    if (cadetIds.length > 0) {
+      const notifs = cadetIds.map((mId) => ({
+        notificationId: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        userId: mId,
+        title: dto.isArena ? `Cohort Arena: ${quiz.title}` : `New Quiz Assigned: ${quiz.title}`,
+        message: dto.isArena
+          ? `An exclusive arena has been scheduled in ${group.name}. Check start times and compete!`
+          : `Instructor assigned "${quiz.title}" to ${group.name}. Access your mission now.`,
+        type: 'QUIZ_ASSIGNED',
+        link: `/groups/${groupId}?tab=quizzes`,
+        read: false,
+      }));
+      await this.notificationModel.insertMany(notifs).catch(() => {});
+    }
+
+    return {
+      message: dto.isArena ? 'Cohort Arena successfully scheduled!' : 'Quiz successfully assigned to cohort!',
+      data: { quiz },
+    };
+  }
+
+  // ==================== 13. COHORT QUIZ RESULTS & LEADERBOARD (VISIBLE TO EVERYONE) ====================
+  async getCohortQuizResults(
+    groupId: string,
+    quizId: string,
+    userPayload: any,
+  ): Promise<ServiceResponse<any>> {
+    const user = await this.userModel.findById(userPayload.userId).lean();
+    const group = await this.groupModel.findOne({ groupId }).lean();
+    if (!group) throw new NotFoundException('Group not found');
+
+    const userIdStr = String(user?._id);
+    const isMember = (group.memberIds || []).includes(userIdStr) || group.creatorId === userIdStr;
+    const isSuper = user?.role === 'SUPER_ADMIN';
+
+    if (!isMember && !isSuper) {
+      throw new ForbiddenException('You must be a member of this cohort to view results');
+    }
+
+    const quiz = await this.quizModel.findOne({ quizId, groupId }).lean();
+    if (!quiz) throw new NotFoundException('Assigned quiz not found in this cohort');
+
+    // Fetch cohort members
+    const members = await this.userModel
+      .find({ _id: { $in: group.memberIds || [] } })
+      .select('_id username fullName profilePicture role')
+      .lean();
+
+    // Fetch all attempts for this quiz by cohort members
+    const memberIdStrs = members.map((m) => String(m._id));
+    const attempts = await this.attemptsModel
+      .find({
+        quizId,
+        userId: { $in: memberIdStrs },
+      })
+      .sort({ score: -1, totalTimeSpentSeconds: 1 })
+      .lean();
+
+    const memberMap = new Map(members.map((m) => [String(m._id), m]));
+
+    // Construct ranked leaderboard
+    const leaderboard = attempts.map((att: any, idx: number) => {
+      const mem = memberMap.get(String(att.userId));
+      const totalQ = quiz.questions?.length || 10;
+      const computedAccuracy =
+        typeof att.accuracy === 'number'
+          ? Math.round(att.accuracy)
+          : Math.min(100, Math.round(((att.score || 0) / totalQ) * 100));
+
+      return {
+        rank: idx + 1,
+        userId: String(att.userId),
+        username: mem?.username || 'Cadet',
+        fullName: mem?.fullName || mem?.username || 'Cadet',
+        profilePicture: mem?.profilePicture || '',
+        score: att.score ?? 0,
+        accuracy: computedAccuracy,
+        timeSpentSeconds: att.totalTimeSpentSeconds || 0,
+        submittedAt: att.createdAt || att.lastUpdateAt || null,
+        isCreator: String(att.userId) === group.creatorId,
+      };
+    });
+
+    const attemptedUserIds = new Set(attempts.map((a: any) => String(a.userId)));
+    const unattemptedMembers = members
+      .filter((m) => !attemptedUserIds.has(String(m._id)))
+      .map((m) => ({
+        userId: String(m._id),
+        username: m.username,
+        fullName: m.fullName || m.username,
+        profilePicture: m.profilePicture || '',
+        isCreator: String(m._id) === group.creatorId,
+        hasAttempted: false,
+      }));
+
+    const totalAttempts = leaderboard.length;
+    const avgScore = totalAttempts > 0
+      ? Math.round((leaderboard.reduce((acc, curr) => acc + curr.score, 0) / totalAttempts) * 10) / 10
+      : 0;
+    const avgAccuracy = totalAttempts > 0
+      ? Math.round(leaderboard.reduce((acc, curr) => acc + curr.accuracy, 0) / totalAttempts)
+      : 0;
+    const avgTimeSeconds = totalAttempts > 0
+      ? Math.round(leaderboard.reduce((acc, curr) => acc + curr.timeSpentSeconds, 0) / totalAttempts)
+      : 0;
+
+    return {
+      message: 'Cohort quiz results retrieved',
+      data: {
+        quiz: {
+          quizId: quiz.quizId,
+          title: quiz.title,
+          pin: quiz.pin,
+          totalQuestions: quiz.questions?.length || 0,
+          deploymentType: quiz.deploymentType,
+          status: quiz.status,
+          scheduledFor: quiz.scheduledFor,
+          liveUntil: quiz.liveUntil,
+          dueDate: quiz.dueDate,
+        },
+        leaderboard,
+        unattemptedMembers,
+        stats: {
+          totalMembers: members.length,
+          totalAttempts,
+          avgScore,
+          avgAccuracy,
+          avgTimeSeconds,
+        },
+      },
+    };
+  }
+
+  // ==================== 14. UNASSIGN QUIZ FROM COHORT ====================
+  async unassignQuiz(
+    groupId: string,
+    quizId: string,
+    userPayload: any,
+  ): Promise<ServiceResponse<any>> {
+    const user = await this.userModel.findById(userPayload.userId).lean();
+    const group = await this.groupModel.findOne({ groupId }).lean();
+    if (!group) throw new NotFoundException('Group not found');
+
+    const isOrgGroup = group.orgId && group.accessMode !== 'PUBLIC';
+    if (isOrgGroup && user?.orgId !== group.orgId && user?.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException('Unauthorized');
+    }
+
+    const isInstructor =
+      group.creatorId === String(user?._id) ||
+      (isOrgGroup && user?.role === 'ORG_ADMIN') ||
+      user?.role === 'SUPER_ADMIN';
+
+    if (!isInstructor) {
+      throw new ForbiddenException('Only the instructor can remove assigned quizzes');
+    }
+
+    const quiz = await this.quizModel.findOne({ quizId, groupId });
+    if (!quiz) throw new NotFoundException('Quiz not found in this cohort');
+
+    quiz.groupId = null;
+    await quiz.save();
+
+    return {
+      message: 'Quiz unassigned from cohort successfully',
+      data: { quizId },
+    };
+  }
 }
+

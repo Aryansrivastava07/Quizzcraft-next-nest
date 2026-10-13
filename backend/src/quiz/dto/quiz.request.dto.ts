@@ -21,6 +21,13 @@ export class generateQuizDto {
   sourceUrl?: string;
 
   @IsOptional()
+  @IsString()
+  orgId?: string;
+
+  @IsOptional()
+  isPractice?: boolean | string;
+
+  @IsOptional()
   images!: Express.Multer.File[];
 
   @IsOptional()
@@ -42,8 +49,44 @@ export class answerQuizDto {
   questionId!: string;
 
   @IsString()
+  @IsOptional()
+  option?: string;
+
+  @IsOptional()
+  timeSpentSeconds?: number;
+
+  @IsOptional()
+  totalTimeSpentSeconds?: number;
+
+  @IsOptional()
+  tabSwitchesCount?: number;
+
+  @IsOptional()
+  copyAttemptsCount?: number;
+
+  @IsOptional()
+  fullscreenExitsCount?: number;
+
+  @IsOptional()
+  antiCheatLogs?: Array<{
+    eventType: string;
+    timestamp: string;
+    details?: string;
+  }>;
+}
+
+export class logAntiCheatDto {
+  @IsString()
   @IsNotEmpty()
-  option!: string;
+  eventType!: string;
+
+  @IsOptional()
+  @IsString()
+  details?: string;
+
+  @IsOptional()
+  @IsString()
+  timestamp?: string;
 }
 
 export class editQuestionDto {
@@ -107,4 +150,18 @@ export class deployQuizDto {
 
   @IsOptional()
   dueDate?: string | Date;
+}
+
+export class copyQuizDto {
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @IsNotEmpty()
+  @IsString()
+  targetWorkspace!: 'PUBLIC' | 'ORGANIZATION' | 'PRIVATE';
+
+  @IsOptional()
+  @IsString()
+  orgId?: string;
 }

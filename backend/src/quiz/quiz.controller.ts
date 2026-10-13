@@ -27,6 +27,8 @@ import {
   answerQuizDto,
   editQuestionDto,
   deployQuizDto,
+  logAntiCheatDto,
+  copyQuizDto,
 } from './dto/quiz.request.dto';
 import { QuizService } from './quiz.service';
 
@@ -103,6 +105,18 @@ export class QuizController {
 
   @UseGuards(JwtAuthGuard)
   @HttpCode(200)
+  @Post('attempt/:sessionId/anti-cheat-log')
+  async logAntiCheatEvent(
+    @Param('sessionId') sessionId: string,
+    @Body() dto: logAntiCheatDto,
+    @Request() req,
+  ) {
+    const userId = req.user.userId;
+    return this.quizService.logAntiCheatEvent(sessionId, dto, userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
   @Get('score/:sessionId')
   async GetScore(
     @Param('sessionId') sessionId: string,
@@ -110,6 +124,49 @@ export class QuizController {
   ) {
     const userId = req.user.userId;
     return this.quizService.getScore(sessionId, userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  @Get('attempt/:sessionId/result')
+  async getAttemptResult(
+    @Param('sessionId') sessionId: string,
+    @Request() req,
+  ) {
+    const userId = req.user.userId;
+    return this.quizService.getAttemptResult(sessionId, userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  @Get('attempt/result/:sessionId')
+  async getAttemptResultAlt(
+    @Param('sessionId') sessionId: string,
+    @Request() req,
+  ) {
+    const userId = req.user.userId;
+    return this.quizService.getAttemptResult(sessionId, userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  @Get('attempt/latest/:quizId')
+  async getLatestAttemptResultByQuiz(
+    @Param('quizId') quizId: string,
+    @Request() req,
+  ) {
+    const userId = req.user.userId;
+    return this.quizService.getLatestAttemptResult(quizId, userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  @Get('attempt/latest')
+  async getLatestAttemptResult(
+    @Request() req,
+  ) {
+    const userId = req.user.userId;
+    return this.quizService.getLatestAttemptResult(undefined, userId);
   }
 
   @HttpCode(200)
@@ -159,6 +216,18 @@ export class QuizController {
   ) {
     const userId = req.user.userId;
     return this.quizService.closeQuiz(quizId, userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(200)
+  @Post(':quizId/copy')
+  async copyQuiz(
+    @Param('quizId') quizId: string,
+    @Body() dto: copyQuizDto,
+    @Request() req,
+  ) {
+    const userId = req.user.userId;
+    return this.quizService.copyQuiz(quizId, userId, dto);
   }
 
   @HttpCode(200)

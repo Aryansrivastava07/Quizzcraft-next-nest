@@ -1,4 +1,5 @@
 export class RegisterAuthResponseDto {
+      userId!: string;
       username!: string;
       email!: string;
       verified!: boolean;
@@ -13,6 +14,7 @@ export class RegisterAuthResponseDto {
 }
 
 export class LoginAuthResponseDto {
+      userId!: string;
       username!: string;
       email!: string;
       emails?: string[];
@@ -30,6 +32,7 @@ export class LoginAuthResponseDto {
 }
 
 export class MeAuthResponseDto {
+      userId!: string;
       username!: string;
       email!: string;
       emails?: string[];
