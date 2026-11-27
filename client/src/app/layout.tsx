@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   title: "QuizzCraft.app • Interactive 3D Quiz Platform",
@@ -31,6 +32,7 @@ export default function RootLayout({
       </head>
       <body className="bg-background text-on-background min-h-screen relative overflow-x-hidden selection:bg-primary selection:text-on-primary font-body-md text-base antialiased">
         <AuthProvider>{children}</AuthProvider>
+        <Analytics />
       </body>
     </html>
   );
