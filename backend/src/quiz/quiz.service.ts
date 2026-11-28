@@ -27,26 +27,7 @@ import { IAiGeneratedQuizResponse } from '../common/interfaces/quiz.interface'; 
 import { IQuiz } from '../common/interfaces/quiz-types.interface'; // New core interface
 import { Attempts } from '../schemas/attempts.schema';
 import { resolveQuizRelatedImage } from './utils/quiz-image.util';
-
-function checkIsCorrect(
-  userChosen: string | undefined | null,
-  rawAnswer: string | undefined | null,
-  options: string[] = [],
-): boolean {
-  if (!userChosen || rawAnswer === undefined || rawAnswer === null) return false;
-  const u = String(userChosen).trim().toLowerCase();
-  const c = String(rawAnswer).trim().toLowerCase();
-  if (u === c) return true;
-
-  const optIdx = options.findIndex((opt) => String(opt).trim().toLowerCase() === u);
-  if (optIdx >= 0) {
-    if (String(optIdx) === c) return true;
-    if (String(optIdx + 1) === c) return true;
-    const letter = ['a', 'b', 'c', 'd', 'e'][optIdx];
-    if (letter && letter === c) return true;
-  }
-  return false;
-}
+import { checkIsCorrect, deriveTopic } from '../common/utils/quiz.util';
 
 @Injectable()
 export class QuizService implements OnModuleInit {
@@ -163,6 +144,7 @@ export class QuizService implements OnModuleInit {
           quizId: randomUUID(),
           pin,
           title: generatedQuiz.quiz.title,
+          topic: deriveTopic(generatedQuiz.quiz.title, questions),
           coverImage,
           ownerId: owner?.ownerId,
           ownerEmail: owner?.ownerEmail,
@@ -1879,6 +1861,7 @@ export class QuizService implements OnModuleInit {
       quizId: newQuizId,
       pin: newPin,
       title: newTitle,
+      topic: (originalQuiz as any).topic || deriveTopic(newTitle, newQuestions),
       coverImage: originalQuiz.coverImage || '',
       ownerId: userId,
       ownerEmail: user.email,

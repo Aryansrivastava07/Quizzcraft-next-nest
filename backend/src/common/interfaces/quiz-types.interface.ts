@@ -20,6 +20,7 @@ export interface IQuiz {
   quizId: string;
   pin?: string;
   title: string;
+  topic?: string;
   coverImage?: string;
   ownerId?: string;
   ownerEmail?: string;

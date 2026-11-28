@@ -16,7 +16,7 @@ export default function ThresholdSection() {
   );
   const [phase1Label, setPhase1Label] = useState("100% Extracted");
   const [phase2Label, setPhase2Label] = useState("15 Questions Ready");
-  const [phase3Label, setPhase3Label] = useState("PIN: 884-219");
+  const [phase3Label, setPhase3Label] = useState("PIN: XXX-XXX (Demo)");
 
   const runScannerExtraction = () => {
     if (isScanning) return;
@@ -32,7 +32,7 @@ export default function ThresholdSection() {
     setTimeout(() => {
       setPhase1Label("Concepts Extracted (100%)");
       setPhase2Label("15 Questions Ready");
-      setPhase3Label("Ready to Play // PIN: 884-219");
+      setPhase3Label("Ready to Play // PIN: XXX-XXX (Demo)");
       setScannerTitle("Complete! 3D Quiz Generated");
       setScannerBtnLabel("Scan Another File");
       setIsScanning(false);

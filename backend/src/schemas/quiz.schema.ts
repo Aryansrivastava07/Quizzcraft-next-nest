@@ -14,6 +14,9 @@ export class Quiz {
   @Prop({ required: true })
   title!: string;
 
+  @Prop({ type: String, default: null })
+  topic?: string;
+
   @Prop({ type: String, default: '' })
   coverImage?: string;
 

@@ -371,13 +371,13 @@ function ProfileContent() {
             quizId: q.quizId || q._id,
             title: q.title || "AI Generated Quiz",
             questionsCount: q.questions?.length || 0,
-            playsCount: 0,
+            playsCount: typeof q.playsCount === "number" ? q.playsCount : (q.stats?.peopleAttempted ?? 0),
             pin: q.pin,
             avgScore: validStatus,
             status: validStatus,
             deploymentType: q.deploymentType || "ANYTIME",
             isDeployed: Boolean(q.isDeployed),
-            topic: q.questions?.[0]?.question ? "AI & Science" : "General Study",
+            topic: q.topic || "General Knowledge",
             date: q.createdAt
               ? new Date(q.createdAt).toLocaleDateString("en-US", {
                   month: "short",
@@ -406,26 +406,26 @@ function ProfileContent() {
       const mapped = rawHistory.map((attempt: any) => {
         const totalQ = attempt.totalQuestions || attempt.Responses?.length || 10;
         const scoreVal = typeof attempt.score === "number" ? attempt.score : 0;
-        const scorePct = totalQ > 0 ? `${Math.round((scoreVal / totalQ) * 100)}%` : "0%";
-        const xpEarned = scoreVal * 150;
-        const status = attempt.isActive
+        const scorePct = attempt.scorePct || (totalQ > 0 ? `${Math.round((scoreVal / totalQ) * 100)}%` : "0%");
+        const xpEarned = typeof attempt.xpEarned === "number" ? attempt.xpEarned : scoreVal * 200;
+        const status = attempt.status || (attempt.isActive
           ? "IN PROGRESS"
           : scoreVal / totalQ >= 0.8
           ? "EXCELLENT"
-          : "COMPLETED";
+          : "COMPLETED");
 
         return {
           title: attempt.title || "Interactive Arena Challenge",
-          sessionCode: attempt.sessionId
+          sessionCode: attempt.sessionCode || (attempt.sessionId
             ? `SES-${attempt.sessionId.slice(0, 8).toUpperCase()}`
-            : "ACTIVE-RUN",
+            : "ACTIVE-SESSION"),
           scorePct,
-          correctAnswers: `${scoreVal}/${totalQ}`,
+          correctAnswers: attempt.correctAnswers || `${scoreVal}/${totalQ}`,
           xpEarned,
-          timeSpent: "Active Session",
-          rank: attempt.isActive ? "Active" : "Evaluated",
-          date: attempt.lastUpdateAt
-            ? new Date(attempt.lastUpdateAt).toLocaleDateString("en-US", {
+          timeSpent: attempt.timeSpent || (attempt.isActive ? "In Progress" : "Completed"),
+          rank: attempt.rank || (attempt.isActive ? "In Progress" : "Evaluated"),
+          date: attempt.lastUpdateAt || attempt.createdAt
+            ? new Date(attempt.lastUpdateAt || attempt.createdAt).toLocaleDateString("en-US", {
                 month: "short",
                 day: "numeric",
                 year: "numeric",
@@ -2043,6 +2043,13 @@ function ProfileContent() {
                                   quiz
                                 </span>
                                 <span>{quiz.questionsCount} Questions</span>
+                              </span>
+                              <span>•</span>
+                              <span className="flex items-center gap-1">
+                                <span className="material-symbols-outlined text-sm text-secondary">
+                                  groups
+                                </span>
+                                <span>{quiz.playsCount} {quiz.playsCount === 1 ? "Play" : "Plays"}</span>
                               </span>
                               <span>•</span>
                               <span className="flex items-center gap-1">

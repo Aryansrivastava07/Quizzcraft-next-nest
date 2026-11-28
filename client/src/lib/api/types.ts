@@ -107,6 +107,7 @@ export interface Quiz {
   quizId: string;
   pin?: string;
   title: string;
+  topic?: string;
   coverImage?: string;
   ownerId?: string;
   ownerEmail?: string;
@@ -134,6 +135,7 @@ export interface Quiz {
   temporalLimit?: boolean;
   questions: QuizQuestion[];
   questionCount?: number;
+  playsCount?: number;
   stats?: QuizStats;
   createdAt?: string;
 }
@@ -153,15 +155,28 @@ export interface GenerateQuizParams {
 
 export interface AttemptSession {
   sessionId: string;
+  sessionCode?: string;
   quizId: string;
   userId: string;
   isActive: boolean;
   lastUpdateAt: string;
+  startedAt?: string;
+  totalTimeSpentSeconds?: number;
+  timeSpent?: string;
+  rank?: string;
+  rankNumber?: number;
+  totalParticipants?: number;
+  xpEarned?: number;
+  scorePct?: string;
+  correctAnswers?: string;
+  status?: string;
   Responses: {
     questionId: string;
     chosenOption: string[];
+    timeSpentSeconds?: number;
   }[];
   score?: number | null;
+  accuracy?: number;
 }
 
 export interface AnswerQuizDto {

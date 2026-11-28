@@ -25,6 +25,7 @@ import { OAuth2Client } from 'google-auth-library';
 import crypto from 'crypto';
 import { Model } from 'mongoose';
 import { User } from '../schemas/user.schema';
+import { GOOGLE_STATE_TTL_MS, GoogleOAuthState, GoogleSignInContext } from '../schemas/google-oauth-state.schema';
 import { comparePassword, hashPassword } from '../common/utils/hash.util';
 import { generateToken, verifyToken } from '../common/utils/token.util';
 import { ConfigService } from '@nestjs/config';
@@ -53,6 +54,7 @@ export class AuthService implements OnModuleInit {
     private readonly redisService: RedisService,
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
+    @Inject('GOOGLE_OAUTH_STATE_MODEL') private readonly googleStates: Model<GoogleOAuthState>,
   ) {}
 
   async onModuleInit() {
@@ -559,14 +561,21 @@ export class AuthService implements OnModuleInit {
     return new OAuth2Client(clientId, clientSecret, callbackUrl);
   }
 
-  getGoogleAuthUrl(
-    params: { redirect?: string; org?: string; group?: string },
+  async getGoogleAuthUrl(
+    params: GoogleSignInContext,
     reqCallbackUrl?: string,
-  ): string {
+  ) {
     const client = this.getGoogleOAuth2Client(reqCallbackUrl);
-    const state = Buffer.from(JSON.stringify(params || {})).toString('base64url');
+    const state = crypto.randomBytes(32).toString('hex');
+    const browserToken = crypto.randomBytes(32).toString('hex');
+    await this.googleStates.create({
+      ...params,
+      _id: state,
+      browserHash: crypto.createHash('sha256').update(browserToken).digest('hex'),
+      expiresAt: new Date(Date.now() + GOOGLE_STATE_TTL_MS),
+    });
 
-    return client.generateAuthUrl({
+    const authUrl = client.generateAuthUrl({
       access_type: 'offline',
       scope: [
         'https://www.googleapis.com/auth/userinfo.profile',
@@ -576,11 +585,27 @@ export class AuthService implements OnModuleInit {
       prompt: 'select_account',
       state,
     });
+    return { authUrl, state, browserToken };
+  }
+
+  async consumeGoogleState(state: unknown, browserToken: unknown): Promise<GoogleSignInContext> {
+    const invalidState = 'Google sign-in expired or could not be verified. Please start again.';
+    if (typeof state !== 'string' || !/^[a-f0-9]{64}$/.test(state) ||
+        typeof browserToken !== 'string' || !/^[a-f0-9]{64}$/.test(browserToken)) {
+      throw new BadRequestException(invalidState);
+    }
+    const transaction = await this.googleStates.findOneAndDelete({
+      _id: state,
+      browserHash: crypto.createHash('sha256').update(browserToken).digest('hex'),
+      expiresAt: { $gt: new Date() },
+    }).lean();
+    if (!transaction) throw new BadRequestException(invalidState);
+    return transaction;
   }
 
   async handleGoogleCallback(
     code: string,
-    state?: string,
+    stateData: GoogleSignInContext,
     reqCallbackUrl?: string,
   ): Promise<{
     user: User;
@@ -590,15 +615,6 @@ export class AuthService implements OnModuleInit {
   }> {
     if (!code) {
       throw new BadRequestException('Authorization code from Google is missing');
-    }
-
-    let stateData: { redirect?: string; org?: string; group?: string } = {};
-    if (state) {
-      try {
-        stateData = JSON.parse(Buffer.from(state, 'base64url').toString('utf8'));
-      } catch {
-        // Silently fallback to empty state
-      }
     }
 
     const client = this.getGoogleOAuth2Client(reqCallbackUrl);

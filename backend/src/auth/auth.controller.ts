@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { AuthService } from './auth.service';
+import { GOOGLE_STATE_TTL_MS } from '../schemas/google-oauth-state.schema';
 import { RegisterAuthDto, LoginAuthDto, LogoutAuthDto, VerifyOTPAuthDto, SendPasswordResetMailAuthDto, ResetPasswordAuthDto, ResendOTP, GoogleAuthDto } from './dto/auth.request.dto';
 import { LoggingInterceptor } from '../common/interceptors/logging.interceptor';
 import { SanitizeInterceptor } from '../common/interceptors/sanitize.interceptor';
@@ -189,8 +190,16 @@ export class AuthController {
     return this.authService.ResetPassword(dto);
   }
 
+  private googleStateCookie(req: any, state: string) {
+    const { secure } = this.getCookieOptions(req, GOOGLE_STATE_TTL_MS);
+    return {
+      name: `${secure ? '__Host-' : ''}google_oauth_${state}`,
+      options: { secure, httpOnly: true, sameSite: 'lax' as const, path: '/' },
+    };
+  }
+
   @Get('google')
-  googleAuth(
+  async googleAuth(
     @Req() req: any,
     @Res() response: Response,
     @Query('redirect') redirect?: string,
@@ -202,10 +211,13 @@ export class AuthController {
       const host = req.headers['x-forwarded-host'] || req.get('host');
       const customCallbackUrl = `${protocol}://${host}/auth/google/callback`;
 
-      const authUrl = this.authService.getGoogleAuthUrl(
+      const { authUrl, state, browserToken } = await this.authService.getGoogleAuthUrl(
         { redirect, org, group },
         customCallbackUrl,
       );
+      const cookie = this.googleStateCookie(req, state);
+      response.cookie(cookie.name, browserToken, { ...cookie.options, maxAge: GOOGLE_STATE_TTL_MS });
+      response.set('Cache-Control', 'no-store');
       return response.redirect(authUrl);
     } catch (err: any) {
       const frontendUrl =
@@ -228,23 +240,19 @@ export class AuthController {
     const frontendUrl =
       process.env.FRONTEND_URL || process.env.CLIENT_URL || 'http://localhost:3000';
 
-    if (error) {
-      return response.redirect(`${frontendUrl}/auth?error=${encodeURIComponent(error)}`);
-    }
-
-    if (!code) {
-      return response.redirect(
-        `${frontendUrl}/auth?error=${encodeURIComponent('No authorization code provided by Google')}`,
-      );
-    }
-
     try {
+      const cookie = this.googleStateCookie(req, state || '');
+      const context = await this.authService.consumeGoogleState(state, req.cookies?.[cookie.name]);
+      response.clearCookie(cookie.name, cookie.options);
+      if (error || !code) {
+        return response.redirect(`${frontendUrl}/auth?error=${encodeURIComponent(error || 'No authorization code provided by Google')}`);
+      }
       const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
       const host = req.headers['x-forwarded-host'] || req.get('host');
       const customCallbackUrl = `${protocol}://${host}/auth/google/callback`;
 
       const { accessToken, refreshToken, redirect } =
-        await this.authService.handleGoogleCallback(code, state, customCallbackUrl);
+        await this.authService.handleGoogleCallback(code, context, customCallbackUrl);
 
       response.cookie('accessToken', accessToken, this.getCookieOptions(req, 1000 * 60 * 10));
       response.cookie('refreshToken', refreshToken, this.getCookieOptions(req, 1000 * 60 * 60 * 24 * 10));
